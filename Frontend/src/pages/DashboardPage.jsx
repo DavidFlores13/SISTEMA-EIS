@@ -1092,7 +1092,7 @@ export default function DashboardPage() {
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={gastosPorCategoria} dataKey="value" nameKey="name" innerRadius={65} outerRadius={105}>
+                      <Pie data={gastosPorCategoria} dataKey="value" nameKey="name" innerRadius={0} outerRadius={105}>
                         {gastosPorCategoria.map((entry, index) => (
                           <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                         ))}
