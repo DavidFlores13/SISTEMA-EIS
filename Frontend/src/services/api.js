@@ -17,6 +17,10 @@ export async function apiFetch(path, options = {}) {
   });
 
   if (!response.ok) {
+    if (response.status === 401 && !path.startsWith("/auth/login")) {
+      window.dispatchEvent(new CustomEvent("auth:unauthorized"));
+    }
+
     let message = "Error inesperado";
     try {
       const errorBody = await response.json();

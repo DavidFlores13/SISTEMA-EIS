@@ -9,6 +9,7 @@ export function FiltersProvider({ children }) {
     mes: now.getMonth() + 1,
     anio: now.getFullYear(),
     id_sucursal: "",
+    rango_meses: 1,
   });
 
   const updateFilters = (next) => {

@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { loginRequest } from "../services/api";
 
 const AuthContext = createContext(null);
@@ -19,14 +19,20 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem("eis_token");
     setToken("");
-  };
+  }, []);
+
+  useEffect(() => {
+    const onUnauthorized = () => logout();
+    window.addEventListener("auth:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("auth:unauthorized", onUnauthorized);
+  }, [logout]);
 
   const value = useMemo(
     () => ({ token, isAuthenticated: Boolean(token), login, logout, loading }),
-    [token, loading]
+    [token, logout, loading]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

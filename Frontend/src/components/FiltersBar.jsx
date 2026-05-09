@@ -25,7 +25,7 @@ export function FiltersBar({ sucursales }) {
   }, []);
 
   return (
-    <section className="grid gap-4 rounded-xl border border-slate-200 bg-white/80 p-4 shadow-soft md:grid-cols-3">
+    <section className="grid gap-4 rounded-xl border border-slate-200 bg-white/80 p-4 shadow-soft md:grid-cols-4">
       <label className="text-sm text-slate-600">
         Mes
         <select
@@ -69,6 +69,19 @@ export function FiltersBar({ sucursales }) {
               {sucursal.nombre}
             </option>
           ))}
+        </select>
+      </label>
+
+      <label className="text-sm text-slate-600">
+        Rango
+        <select
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+          value={filters.rango_meses}
+          onChange={(event) => updateFilters({ rango_meses: Number(event.target.value) })}
+        >
+          <option value={1}>Mes actual</option>
+          <option value={3}>Ultimos 3 meses</option>
+          <option value={6}>Ultimos 6 meses</option>
         </select>
       </label>
     </section>
