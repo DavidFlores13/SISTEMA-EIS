@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: radial-gradient(circle at 20% 20%, #dff8ff 0, #f4f9fc 35%, #f7f4ee 100%);
+  color: #0b1d3a;
+}
+
+#root {
+  min-height: 100vh;
+}
