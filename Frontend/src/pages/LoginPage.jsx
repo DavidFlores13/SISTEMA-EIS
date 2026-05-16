@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage() {
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("admin123");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const { login, loading } = useAuth();
   const navigate = useNavigate();
@@ -37,7 +37,7 @@ export default function LoginPage() {
             Ingresa tus credenciales para acceder al panel.
           </p>
 
-          <form className="mt-8 space-y-5" onSubmit={onSubmit}>
+          <form className="mt-8 space-y-5" onSubmit={onSubmit} autoComplete="off">
             <label className="block text-sm text-slate-600">
               Usuario
               <input
