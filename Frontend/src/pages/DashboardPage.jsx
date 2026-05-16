@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { utils as xlsxUtils, writeFile as writeXlsxFile } from "xlsx";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
   Bar,
   BarChart,
@@ -21,15 +24,17 @@ import { checkApiConnection, getGastos, getMetas, getSucursales, getVentas } fro
 import { KpiCard } from "../components/KpiCard";
 import { FiltersBar } from "../components/FiltersBar";
 
-const PIE_COLORS = ["#0b1d3a", "#22d3ee", "#2dd4bf", "#0ea5e9", "#14b8a6", "#1d4ed8"];
+const PIE_COLORS = ["#0b1d3a", "#22d3ee", "#2dd42d", "#0ea5e9", "#b8b514", "#1d4ed8"];
 const SECTION_ITEMS = [
   { id: "resumen", label: "Resumen" },
+  { id: "ranking", label: "Top sucursales" },
   { id: "alertas", label: "Alertas" },
   { id: "tendencia", label: "Tendencia" },
   { id: "comparativo", label: "Comparativa metas vs real" },
   { id: "utilidad", label: "Utilidad mensual" },
   { id: "periodos", label: "Comparativa de utilidad" },
   { id: "gastos", label: "Gastos" },
+  { id: "exportar", label: "Exportar datos" },
   { id: "detalle", label: "Detalle por sucursal" },
 ];
 const MONTH_NAMES = [
@@ -155,6 +160,7 @@ function EstadoChip({ estado }) {
 export default function DashboardPage() {
   const { logout } = useAuth();
   const { filters, updateFilters } = useFilters();
+  const selectedSucursalId = filters.id_sucursal ? Number(filters.id_sucursal) : null;
 
   const [ventas, setVentas] = useState([]);
   const [gastos, setGastos] = useState([]);
@@ -169,10 +175,55 @@ export default function DashboardPage() {
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [latestPeriod, setLatestPeriod] = useState(null);
   const [toast, setToast] = useState(null);
+  const [topFiltersOpen, setTopFiltersOpen] = useState(false);
+  const [trendMode, setTrendMode] = useState(() => {
+    try {
+      const raw = localStorage.getItem("eis_dashboard_prefs_v1");
+      if (!raw) return "historico";
+      const saved = JSON.parse(raw);
+      return saved.trendMode === "filtrado" ? "filtrado" : "historico";
+    } catch {
+      return "historico";
+    }
+  });
+  const [utilidadMode, setUtilidadMode] = useState(() => {
+    try {
+      const raw = localStorage.getItem("eis_dashboard_prefs_v1");
+      if (!raw) return "historico";
+      const saved = JSON.parse(raw);
+      return saved.utilidadMode === "filtrado" ? "filtrado" : "historico";
+    } catch {
+      return "historico";
+    }
+  });
+  const [reloadTick, setReloadTick] = useState(0);
+  const [exportFormat, setExportFormat] = useState("csv");
   const [detalleSearch, setDetalleSearch] = useState("");
   const [detalleSort, setDetalleSort] = useState({ key: "cumplimiento_pct", dir: "desc" });
   const scrollLockRef = useRef(false);
   const scrollLockTimerRef = useRef(null);
+  const DASHBOARD_PREFS_KEY = "eis_dashboard_prefs_v1";
+  const sectionItems = useMemo(
+    () =>
+      selectedSucursalId
+        ? SECTION_ITEMS.filter((item) => item.id !== "ranking")
+        : SECTION_ITEMS,
+    [selectedSucursalId]
+  );
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        DASHBOARD_PREFS_KEY,
+        JSON.stringify({
+          trendMode,
+          utilidadMode,
+        })
+      );
+    } catch {
+      // Ignorar errores de almacenamiento local.
+    }
+  }, [trendMode, utilidadMode]);
 
   useEffect(() => {
     let mounted = true;
@@ -188,7 +239,7 @@ export default function DashboardPage() {
       mounted = false;
       clearInterval(intervalId);
     };
-  }, []);
+  }, [reloadTick]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -209,9 +260,9 @@ export default function DashboardPage() {
   useEffect(() => {
     function onScroll() {
       if (scrollLockRef.current) return;
-      let current = SECTION_ITEMS[0].id;
+      let current = sectionItems[0]?.id || "resumen";
       const scrollMarker = window.scrollY + 150;
-      const sections = SECTION_ITEMS.map((section) => {
+      const sections = sectionItems.map((section) => {
         const el = document.getElementById(section.id);
         return el ? { id: section.id, top: el.offsetTop } : null;
       }).filter(Boolean);
@@ -228,7 +279,7 @@ export default function DashboardPage() {
       const isAtBottom =
         window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
       if (isAtBottom) {
-        current = SECTION_ITEMS[SECTION_ITEMS.length - 1].id;
+        current = sectionItems[sectionItems.length - 1]?.id || current;
       }
 
       setActiveSection(current);
@@ -237,7 +288,7 @@ export default function DashboardPage() {
     window.addEventListener("scroll", onScroll);
     onScroll();
     return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [sectionItems]);
 
   useEffect(
     () => () => {
@@ -301,15 +352,14 @@ export default function DashboardPage() {
     return () => {
       mounted = false;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const selectedSucursalId = filters.id_sucursal ? Number(filters.id_sucursal) : null;
-  const selectedPeriodKey = `${filters.anio}-${String(filters.mes).padStart(2, "0")}`;
   const selectedRange = Number(filters.rango_meses || 1);
   const activePeriodKeys = getPeriodKeys(filters.anio, filters.mes, selectedRange);
-  const activePeriodSet = new Set(activePeriodKeys);
+  const activePeriodSet = useMemo(() => new Set(activePeriodKeys), [activePeriodKeys]);
   const previousRangeKeys = getPreviousPeriodKeys(filters.anio, filters.mes, selectedRange);
-  const previousRangeSet = new Set(previousRangeKeys);
+  const previousRangeSet = useMemo(() => new Set(previousRangeKeys), [previousRangeKeys]);
   const prevPeriod = getPrevPeriod(filters.anio, filters.mes);
 
   const scopedVentas = useMemo(
@@ -359,10 +409,24 @@ export default function DashboardPage() {
       ),
     [scopedMetas, previousRangeSet]
   );
+  const hasNoDataForSelection =
+    !loading &&
+    !error &&
+    periodVentas.length === 0 &&
+    periodGastos.length === 0 &&
+    periodMetas.length === 0;
 
   const totalVentasPeriodo = periodVentas.reduce((acc, x) => acc + Number(x.monto_total || 0), 0);
   const totalVentasPrevio = prevPeriodVentas.reduce((acc, x) => acc + Number(x.monto_total || 0), 0);
   const totalVentasPrevioRango = prevRangeVentas.reduce((acc, x) => acc + Number(x.monto_total || 0), 0);
+  const totalTransaccionesPeriodo = periodVentas.reduce(
+    (acc, x) => acc + Number(x.cantidad_transacciones || 0),
+    0
+  );
+  const totalTransaccionesPrevio = prevPeriodVentas.reduce(
+    (acc, x) => acc + Number(x.cantidad_transacciones || 0),
+    0
+  );
   const totalGastosPeriodo = periodGastos.reduce((acc, x) => acc + Number(x.monto || 0), 0);
   const totalMetaPeriodo = periodMetas.reduce((acc, x) => acc + Number(x.valor_objetivo || 0), 0);
   const totalGastosPrevioRango = prevRangeGastos.reduce((acc, x) => acc + Number(x.monto || 0), 0);
@@ -374,6 +438,18 @@ export default function DashboardPage() {
     totalMetaPrevioRango === 0 ? 0 : (totalVentasPrevioRango / totalMetaPrevioRango) * 100;
   const estado = getEstado(cumplimientoPct);
   const variacionVentas = totalVentasPrevio === 0 ? null : ((totalVentasPeriodo - totalVentasPrevio) / totalVentasPrevio) * 100;
+  const variacionTransacciones =
+    totalTransaccionesPrevio === 0
+      ? null
+      : ((totalTransaccionesPeriodo - totalTransaccionesPrevio) / totalTransaccionesPrevio) * 100;
+  const ticketPromedioPeriodo =
+    totalTransaccionesPeriodo === 0 ? 0 : totalVentasPeriodo / totalTransaccionesPeriodo;
+  const ticketPromedioPrevio =
+    totalTransaccionesPrevio === 0 ? 0 : totalVentasPrevio / totalTransaccionesPrevio;
+  const variacionTicketPromedio =
+    ticketPromedioPrevio === 0
+      ? null
+      : ((ticketPromedioPeriodo - ticketPromedioPrevio) / ticketPromedioPrevio) * 100;
   const diferenciaPeriodoAnterior = totalVentasPeriodo - totalVentasPrevioRango;
   const diferenciaPctPeriodoAnterior =
     totalVentasPrevioRango === 0 ? null : (diferenciaPeriodoAnterior / totalVentasPrevioRango) * 100;
@@ -383,9 +459,6 @@ export default function DashboardPage() {
   const diferenciaUtilidad = utilidadPeriodo - utilidadPreviaRango;
   const diferenciaUtilidadPct =
     utilidadPreviaRango === 0 ? null : (diferenciaUtilidad / utilidadPreviaRango) * 100;
-  const diferenciaMeta = totalMetaPeriodo - totalMetaPrevioRango;
-  const diferenciaMetaPct =
-    totalMetaPrevioRango === 0 ? null : (diferenciaMeta / totalMetaPrevioRango) * 100;
   const diferenciaCumplimiento = cumplimientoPct - cumplimientoPctPrevio;
 
   const trendData = useMemo(() => {
@@ -398,6 +471,18 @@ export default function DashboardPage() {
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([periodo, total]) => ({ periodo, total }));
   }, [scopedVentas]);
+  const trendDataFiltered = useMemo(() => {
+    const map = new Map();
+    for (const item of scopedVentas) {
+      const key = monthKey(item.fecha);
+      map.set(key, (map.get(key) || 0) + Number(item.monto_total || 0));
+    }
+    const keys = Array.from(new Set([...activePeriodKeys, prevPeriod.key])).sort((a, b) =>
+      a.localeCompare(b)
+    );
+    return keys.map((periodo) => ({ periodo, total: map.get(periodo) || 0 }));
+  }, [scopedVentas, activePeriodKeys, prevPeriod.key]);
+  const activeTrendData = trendMode === "historico" ? trendData : trendDataFiltered;
 
   const gastosPorCategoria = useMemo(() => {
     const map = new Map();
@@ -446,6 +531,9 @@ export default function DashboardPage() {
       };
     });
   }, [selectedSucursalId, sucursales, ventas, gastos, metas, activePeriodSet]);
+  const hasComparativoData = compareBySucursal.some(
+    (row) => row.ventas > 0 || row.meta > 0 || row.gastos > 0
+  );
 
   const compareVsAnteriorBySucursal = useMemo(() => {
     const targetSucursales = selectedSucursalId
@@ -481,6 +569,22 @@ export default function DashboardPage() {
       };
     });
   }, [selectedSucursalId, sucursales, ventas, gastos, activePeriodSet, previousRangeSet]);
+  const rankingSucursales = useMemo(() => {
+    const prevById = new Map(
+      compareVsAnteriorBySucursal.map((row) => [row.id_sucursal, row])
+    );
+    return [...compareBySucursal]
+      .map((row) => {
+        const prev = prevById.get(row.id_sucursal);
+        return {
+          ...row,
+          diff_utilidad: prev?.diff_utilidad ?? 0,
+          diff_pct: prev?.diff_pct ?? null,
+        };
+      })
+      .sort((a, b) => b.utilidad - a.utilidad)
+      .slice(0, 5);
+  }, [compareBySucursal, compareVsAnteriorBySucursal]);
 
   const utilidadMensualData = useMemo(() => {
     const mapVentas = new Map();
@@ -501,6 +605,27 @@ export default function DashboardPage() {
       utilidad: (mapVentas.get(k) || 0) - (mapGastos.get(k) || 0),
     }));
   }, [scopedVentas, scopedGastos]);
+  const utilidadMensualDataFiltered = useMemo(() => {
+    const mapVentas = new Map();
+    const mapGastos = new Map();
+    for (const item of scopedVentas) {
+      const key = monthKey(item.fecha);
+      mapVentas.set(key, (mapVentas.get(key) || 0) + Number(item.monto_total || 0));
+    }
+    for (const item of scopedGastos) {
+      const key = monthKey(item.fecha);
+      mapGastos.set(key, (mapGastos.get(key) || 0) + Number(item.monto || 0));
+    }
+    const keys = Array.from(new Set([...activePeriodKeys, prevPeriod.key])).sort((a, b) =>
+      a.localeCompare(b)
+    );
+    return keys.map((k) => ({
+      periodo: k,
+      utilidad: (mapVentas.get(k) || 0) - (mapGastos.get(k) || 0),
+    }));
+  }, [scopedVentas, scopedGastos, activePeriodKeys, prevPeriod.key]);
+  const activeUtilidadData =
+    utilidadMode === "historico" ? utilidadMensualData : utilidadMensualDataFiltered;
 
 
   const alerts = useMemo(() => {
@@ -595,10 +720,13 @@ export default function DashboardPage() {
   const scrollToSection = (id) => {
     const el = document.getElementById(id);
     if (!el) return;
+    const topHeader = document.querySelector("section.flex-1 > header");
+    const headerOffset = topHeader ? topHeader.getBoundingClientRect().height + 10 : 0;
+    const top = el.getBoundingClientRect().top + window.scrollY - headerOffset;
     scrollLockRef.current = true;
     if (scrollLockTimerRef.current) clearTimeout(scrollLockTimerRef.current);
     setActiveSection(id);
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
     setMobileSidebarOpen(false);
     scrollLockTimerRef.current = setTimeout(() => {
       scrollLockRef.current = false;
@@ -608,6 +736,11 @@ export default function DashboardPage() {
   const goTop = () => {
     window.scrollTo({ top: 0, behavior: "smooth" });
     setMobileSidebarOpen(false);
+  };
+
+  const refreshDashboardData = () => {
+    setReloadTick((prev) => prev + 1);
+    setToast({ type: "success", message: "Actualizando datos..." });
   };
 
   const resetFilters = () => {
@@ -636,7 +769,7 @@ export default function DashboardPage() {
     return "neutral";
   };
 
-  const exportDetalleCsv = () => {
+  const exportDetalle = () => {
     const header = ["Sucursal", "Ventas", "Gastos", "Utilidad", "Meta", "CumplimientoPct", "Estado"];
     const rows = compareBySucursal.map((row) => ({
       Sucursal: row.sucursal,
@@ -647,14 +780,14 @@ export default function DashboardPage() {
       CumplimientoPct: row.cumplimiento_pct.toFixed(2),
       Estado: getEstadoLabel(row.estado),
     }));
-    exportCsv(
-      `detalle_sucursales_${filters.anio}_${String(filters.mes).padStart(2, "0")}_r${selectedRange}.csv`,
+    exportData(
+      "detalle_sucursales",
       header,
       rows
     );
   };
 
-  const exportVentasCsv = () => {
+  const exportVentas = () => {
     const header = ["fecha", "id_sucursal", "sucursal", "monto_total", "cantidad_transacciones"];
     const rows = periodVentas.map((v) => ({
       fecha: v.fecha,
@@ -663,14 +796,10 @@ export default function DashboardPage() {
       monto_total: Number(v.monto_total || 0).toFixed(2),
       cantidad_transacciones: v.cantidad_transacciones,
     }));
-    exportCsv(
-      `ventas_${filters.anio}_${String(filters.mes).padStart(2, "0")}_r${selectedRange}.csv`,
-      header,
-      rows
-    );
+    exportData("ventas", header, rows);
   };
 
-  const exportGastosCsv = () => {
+  const exportGastos = () => {
     const header = ["fecha", "id_sucursal", "sucursal", "categoria", "monto"];
     const rows = periodGastos.map((g) => ({
       fecha: g.fecha,
@@ -679,14 +808,10 @@ export default function DashboardPage() {
       categoria: g.categoria,
       monto: Number(g.monto || 0).toFixed(2),
     }));
-    exportCsv(
-      `gastos_${filters.anio}_${String(filters.mes).padStart(2, "0")}_r${selectedRange}.csv`,
-      header,
-      rows
-    );
+    exportData("gastos", header, rows);
   };
 
-  const exportMetasCsv = () => {
+  const exportMetas = () => {
     const header = ["anio", "mes", "id_sucursal", "sucursal", "nombre_kpi", "valor_objetivo"];
     const rows = periodMetas.map((m) => ({
       anio: m.anio,
@@ -696,14 +821,23 @@ export default function DashboardPage() {
       nombre_kpi: m.nombre_kpi,
       valor_objetivo: Number(m.valor_objetivo || 0).toFixed(2),
     }));
-    exportCsv(
-      `metas_${filters.anio}_${String(filters.mes).padStart(2, "0")}_r${selectedRange}.csv`,
-      header,
-      rows
-    );
+    exportData("metas", header, rows);
   };
 
-  const exportCsv = (filename, header, rows) => {
+  const exportData = (prefix, header, rows) => {
+    const baseFilename = `${prefix}_${filters.anio}_${String(filters.mes).padStart(2, "0")}_r${selectedRange}`;
+    if (exportFormat === "xlsx") {
+      exportXlsx(baseFilename, rows);
+      return;
+    }
+    if (exportFormat === "pdf") {
+      exportPdf(baseFilename, header, rows);
+      return;
+    }
+    exportCsv(baseFilename, header, rows);
+  };
+
+  const exportCsv = (baseFilename, header, rows) => {
     try {
       const csv = [header, ...rows.map((r) => header.map((h) => r[h]))]
         .map((cols) =>
@@ -717,19 +851,56 @@ export default function DashboardPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = filename;
+      a.download = `${baseFilename}.csv`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      setToast({ type: "success", message: `CSV descargado: ${filename}` });
+      setToast({ type: "success", message: `CSV descargado: ${baseFilename}.csv` });
     } catch {
       setToast({ type: "error", message: "No se pudo exportar el CSV." });
     }
   };
 
+  const exportXlsx = (baseFilename, rows) => {
+    try {
+      const worksheet = xlsxUtils.json_to_sheet(rows);
+      const workbook = xlsxUtils.book_new();
+      xlsxUtils.book_append_sheet(workbook, worksheet, "Datos");
+      writeXlsxFile(workbook, `${baseFilename}.xlsx`);
+      setToast({ type: "success", message: `Excel descargado: ${baseFilename}.xlsx` });
+    } catch {
+      setToast({ type: "error", message: "No se pudo exportar el Excel." });
+    }
+  };
+
+  const exportPdf = (baseFilename, header, rows) => {
+    try {
+      const doc = new jsPDF({ orientation: "landscape" });
+      doc.setFontSize(13);
+      doc.text("Sistema EIS - Exportacion de datos", 14, 14);
+      doc.setFontSize(10);
+      doc.text(
+        `Periodo: ${selectedMonthName} ${filters.anio} | Rango: ${selectedRangeLabel} | Sucursal: ${selectedSucursalName}`,
+        14,
+        21
+      );
+      autoTable(doc, {
+        startY: 26,
+        head: [header],
+        body: rows.map((row) => header.map((h) => row[h] ?? "")),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [11, 29, 58] },
+      });
+      doc.save(`${baseFilename}.pdf`);
+      setToast({ type: "success", message: `PDF descargado: ${baseFilename}.pdf` });
+    } catch {
+      setToast({ type: "error", message: "No se pudo exportar el PDF." });
+    }
+  };
+
   return (
-    <main className="min-h-screen bg-slate-100/80">
+    <main className="min-h-screen bg-slate-100">
       {mobileSidebarOpen ? (
         <button
           type="button"
@@ -758,7 +929,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <button
-              className="rounded-md border border-white/20 px-2 py-1 text-xs"
+              className="rounded-md border border-white/20 px-2 py-1 text-xs transition-colors duration-150 hover:bg-white/10 active:bg-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200/60"
               onClick={() => setMobileSidebarOpen(false)}
             >
               Cerrar
@@ -767,11 +938,11 @@ export default function DashboardPage() {
 
           <nav className="space-y-2 text-sm">
             <p className="px-1 pt-1 text-[11px] uppercase tracking-wider text-cyan-200/80">Vision general</p>
-            {SECTION_ITEMS.slice(0, 3).map((item) => (
+            {sectionItems.slice(0, 3).map((item) => (
               <button
                 key={item.id}
-                className={`w-full rounded-lg px-3 py-2 text-left ${
-                  activeSection === item.id ? "bg-white/15 font-medium" : "text-cyan-100/90"
+                className={`w-full rounded-lg px-3 py-2 text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200/60 ${
+                  activeSection === item.id ? "bg-white/15 font-medium" : "text-cyan-100/90 hover:bg-white/10"
                 }`}
                 onClick={() => scrollToSection(item.id)}
               >
@@ -780,11 +951,11 @@ export default function DashboardPage() {
             ))}
 
             <p className="px-1 pt-3 text-[11px] uppercase tracking-wider text-cyan-200/80">Operacion</p>
-            {SECTION_ITEMS.slice(3).map((item) => (
+            {sectionItems.slice(3).map((item) => (
               <button
                 key={item.id}
-                className={`w-full rounded-lg px-3 py-2 text-left ${
-                  activeSection === item.id ? "bg-white/15 font-medium" : "text-cyan-100/90"
+                className={`w-full rounded-lg px-3 py-2 text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200/60 ${
+                  activeSection === item.id ? "bg-white/15 font-medium" : "text-cyan-100/90 hover:bg-white/10"
                 }`}
                 onClick={() => scrollToSection(item.id)}
               >
@@ -795,9 +966,9 @@ export default function DashboardPage() {
         </div>
       </aside>
 
-      <div className="mx-auto flex max-w-[1500px] gap-4 p-4 lg:p-5">
-        <aside className="hidden w-56 flex-col justify-between rounded-2xl bg-eis-navy p-3.5 text-white shadow-soft lg:sticky lg:top-5 lg:flex lg:h-[calc(100vh-2.5rem)]">
-          <div className="space-y-6">
+      <div className="flex lg:pl-56">
+        <aside className="hidden w-56 flex-col bg-eis-navy p-3.5 text-white lg:fixed lg:left-0 lg:top-0 lg:flex lg:h-screen lg:overflow-y-auto">
+          <div className="space-y-5">
             <div className="flex items-center gap-3">
               <img
                 src="/LOGO.png"
@@ -812,11 +983,11 @@ export default function DashboardPage() {
 
             <nav className="space-y-1.5 text-sm">
               <p className="px-1 pt-1 text-[11px] uppercase tracking-wider text-cyan-200/80">Vision general</p>
-              {SECTION_ITEMS.slice(0, 3).map((item) => (
+              {sectionItems.slice(0, 3).map((item) => (
                 <button
-                  key={item.id}
-                  className={`w-full rounded-lg px-2.5 py-1.5 text-left ${
-                    activeSection === item.id ? "bg-white/15 font-medium" : "text-cyan-100/90"
+                key={item.id}
+                  className={`w-full rounded-lg px-2.5 py-1.5 text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200/60 ${
+                    activeSection === item.id ? "bg-white/15 font-medium" : "text-cyan-100/90 hover:bg-white/10"
                   }`}
                   onClick={() => scrollToSection(item.id)}
                 >
@@ -825,11 +996,11 @@ export default function DashboardPage() {
               ))}
 
               <p className="px-1 pt-3 text-[11px] uppercase tracking-wider text-cyan-200/80">Operacion</p>
-              {SECTION_ITEMS.slice(3).map((item) => (
+              {sectionItems.slice(3).map((item) => (
                 <button
-                  key={item.id}
-                  className={`w-full rounded-lg px-2.5 py-1.5 text-left ${
-                    activeSection === item.id ? "bg-white/15 font-medium" : "text-cyan-100/90"
+                key={item.id}
+                  className={`w-full rounded-lg px-2.5 py-1.5 text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200/60 ${
+                    activeSection === item.id ? "bg-white/15 font-medium" : "text-cyan-100/90 hover:bg-white/10"
                   }`}
                   onClick={() => scrollToSection(item.id)}
                 >
@@ -839,8 +1010,8 @@ export default function DashboardPage() {
             </nav>
           </div>
 
-          <div className="rounded-xl border border-white/20 bg-white/10 p-3 text-xs text-cyan-50">
-            <p className="font-semibold">Contexto actual</p>
+          <div className="mt-5 rounded-xl border border-white/15 bg-white/5 p-3 text-xs text-cyan-100/90">
+            <p className="font-semibold text-cyan-50">Contexto actual</p>
             <p className="mt-1">Mes: {selectedMonthName}</p>
             <p>Año: {filters.anio}</p>
             <p>Sucursal: {selectedSucursalName}</p>
@@ -848,64 +1019,92 @@ export default function DashboardPage() {
           </div>
         </aside>
 
-        <section className="flex-1 space-y-6">
-          <header className="sticky top-3 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-soft backdrop-blur">
-            <div>
-              <button
-                className="mb-2 rounded-lg bg-eis-navy px-3 py-2 text-xs font-medium text-white lg:hidden"
-                onClick={() => setMobileSidebarOpen(true)}
-              >
-                Menu
-              </button>
-              <h2 className="text-xl font-semibold text-eis-navy">Centro de Control</h2>
-              <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-                <p className="text-sm text-slate-600">
-                  Analisis ejecutivo con datos reales del periodo seleccionado.
-                </p>
-                <p className="text-xs text-slate-400">
-                  Actualizado: {lastUpdated ? lastUpdated.toLocaleString("es-HN") : "Sin datos aun"}
-                </p>
+        <section className="flex-1 p-4 lg:p-5">
+          <header className="sticky top-0 z-20 space-y-2 border border-slate-200 bg-white px-4 py-3 lg:fixed lg:left-56 lg:right-0 lg:top-0 lg:z-30 lg:px-5 lg:pb-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <button
+                  className="mb-2 rounded-lg bg-eis-navy px-3 py-2 text-xs font-medium text-white transition-colors duration-150 hover:bg-slate-800 active:bg-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 lg:hidden"
+                  onClick={() => setMobileSidebarOpen(true)}
+                >
+                  Menu
+                </button>
+                <h2 className="text-xl font-semibold text-eis-navy">Centro de Control</h2>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <p className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                    Actualizado: {lastUpdated ? lastUpdated.toLocaleString("es-HN") : "Sin datos aun"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <ApiStatusIndicator connected={apiConnected} />
+                <button
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={refreshDashboardData}
+                  disabled={loading}
+                >
+                  {loading ? "Actualizando..." : "Actualizar datos"}
+                </button>
+                <button
+                  className="rounded-lg bg-eis-navy px-4 py-2 text-sm font-medium text-white transition-colors duration-150 hover:bg-slate-800 active:bg-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100"
+                  onClick={logout}
+                >
+                  Cerrar sesion
+                </button>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <ApiStatusIndicator connected={apiConnected} />
-              <button
-                className="rounded-lg bg-eis-navy px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-                onClick={logout}
-              >
-                Cerrar sesion
-              </button>
+            <div className="border-t border-slate-200 pt-2">
+              <div className="mb-1 flex items-center justify-end gap-2 md:hidden">
+                <button
+                  className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 md:hidden"
+                  onClick={() => setTopFiltersOpen((prev) => !prev)}
+                >
+                  {topFiltersOpen ? "Ocultar filtros" : "Mostrar filtros"}
+                </button>
+              </div>
+              <div className={`${topFiltersOpen ? "block" : "hidden"} md:block`}>
+                <FiltersBar sucursales={sucursales} compact onReset={resetFilters} />
+              </div>
             </div>
           </header>
+          <div className="space-y-5 pt-5 lg:pt-[9.75rem]">
+            {error ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 p-3">
+                <p className="text-sm text-red-700">{error}</p>
+                <button
+                  className="rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors duration-150 hover:bg-red-100 active:bg-red-200/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-200"
+                  onClick={() => setReloadTick((prev) => prev + 1)}
+                >
+                  Reintentar
+                </button>
+              </div>
+            ) : null}
+            {hasNoDataForSelection ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-sm text-amber-800">
+                  No hay datos para los filtros actuales. Prueba otro mes, sucursal o rango.
+                </p>
+                <button
+                  className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 transition-colors duration-150 hover:bg-amber-100 active:bg-amber-200/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200"
+                  onClick={resetFilters}
+                >
+                  Restablecer filtros
+                </button>
+              </div>
+            ) : null}
 
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-slate-600">Filtros del periodo</p>
-              <button
-                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                onClick={resetFilters}
-              >
-                Limpiar filtros
-              </button>
-            </div>
-            <FiltersBar sucursales={sucursales} />
-          </div>
-          {error ? <p className="rounded-lg bg-red-100 p-3 text-sm text-red-700">{error}</p> : null}
-
-          <div className="space-y-1">
-            <p className="px-1 text-[11px] uppercase tracking-wider text-slate-500">Vision general</p>
-            <div className="h-px bg-slate-200" />
-          </div>
-
-          <section id="resumen" className="scroll-mt-28">
+          <section id="resumen" className="scroll-mt-44">
             <div className="mb-3">
               <h3 className="text-lg font-semibold text-eis-navy">Resumen ejecutivo</h3>
               <p className="text-sm text-slate-500">KPI principales del periodo seleccionado.</p>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {loading ? (
               <>
+                <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
+                <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
                 <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
                 <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
                 <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
@@ -952,12 +1151,80 @@ export default function DashboardPage() {
                   subtitleTone={toneFromDiff(diferenciaCumplimiento)}
                   tone={estado === "verde" ? "success" : estado === "amarillo" ? "warning" : "danger"}
                 />
+                <KpiCard
+                  title="Transacciones del periodo"
+                  value={totalTransaccionesPeriodo.toLocaleString("es-HN")}
+                  subtitle={`Variacion vs periodo anterior: ${
+                    variacionTransacciones === null ? "N/A" : `${variacionTransacciones.toFixed(2)}%`
+                  }`}
+                  subtitleTone={
+                    variacionTransacciones === null
+                      ? "neutral"
+                      : variacionTransacciones >= 0
+                        ? "up"
+                        : "down"
+                  }
+                />
+                <KpiCard
+                  title="Monto promedio por transaccion"
+                  value={money(ticketPromedioPeriodo)}
+                  subtitle={`Variacion vs periodo anterior: ${
+                    variacionTicketPromedio === null ? "N/A" : `${variacionTicketPromedio.toFixed(2)}%`
+                  }`}
+                  subtitleTone={
+                    variacionTicketPromedio === null
+                      ? "neutral"
+                      : variacionTicketPromedio >= 0
+                        ? "up"
+                        : "down"
+                  }
+                />
               </>
             )}
             </div>
           </section>
 
-          <section id="alertas" className="scroll-mt-28">
+          {!selectedSucursalId ? (
+            <section id="ranking" className="scroll-mt-44">
+              <article className="overflow-auto rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
+                <h3 className="mb-3 text-lg font-semibold text-eis-navy">Top sucursales del periodo</h3>
+                <table className="min-w-full text-left text-sm">
+                  <thead className="border-b border-slate-200 text-slate-500">
+                    <tr>
+                      <th className="py-2">Rank</th>
+                      <th className="py-2">Sucursal</th>
+                      <th className="py-2">Utilidad</th>
+                      <th className="py-2">Cumplimiento</th>
+                      <th className="py-2">Dif. utilidad</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rankingSucursales.map((row, index) => (
+                      <tr key={row.id_sucursal} className="border-b border-slate-100">
+                        <td className="py-2 pr-2 font-semibold text-eis-navy">#{index + 1}</td>
+                        <td className="py-2 pr-2">{row.sucursal}</td>
+                        <td className="py-2 pr-2">{money(row.utilidad)}</td>
+                        <td className="py-2 pr-2">{row.cumplimiento_pct}%</td>
+                        <td className={`py-2 pr-2 font-semibold ${diffTextTone(row.diff_utilidad)}`}>
+                          {trendArrow(row.diff_utilidad)} {money(row.diff_utilidad)}
+                          {row.diff_pct === null ? "" : ` (${row.diff_pct.toFixed(2)}%)`}
+                        </td>
+                      </tr>
+                    ))}
+                    {rankingSucursales.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-6 text-center text-sm text-slate-500">
+                          No hay datos para generar ranking en este periodo.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </article>
+            </section>
+          ) : null}
+
+          <section id="alertas" className="scroll-mt-44">
             <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
               <h3 className="mb-3 text-lg font-semibold text-eis-navy">Alertas ejecutivas</h3>
               {alerts.length === 0 ? (
@@ -974,7 +1241,7 @@ export default function DashboardPage() {
                       <p className="text-sm text-amber-700">{item.text}</p>
                       {item.actionable ? (
                         <button
-                          className="rounded-md border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+                          className="rounded-md border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-700 transition-colors duration-150 hover:bg-amber-100 active:bg-amber-200/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200"
                           onClick={() => scrollToSection(item.target)}
                         >
                           Ver detalle
@@ -987,42 +1254,96 @@ export default function DashboardPage() {
             </article>
           </section>
 
-          <section id="tendencia" className="scroll-mt-28">
+          <section id="tendencia" className="scroll-mt-44">
             <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
-              <h3 className="mb-1 text-lg font-semibold text-eis-navy">Tendencia de ventas</h3>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-lg font-semibold text-eis-navy">Tendencia de ventas</h3>
+                <div className="inline-flex rounded-lg border border-slate-300 bg-white p-1">
+                  <button
+                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 ${
+                      trendMode === "historico"
+                        ? "bg-eis-navy text-white"
+                        : "text-slate-600 hover:bg-slate-100 active:bg-slate-200"
+                    }`}
+                    onClick={() => setTrendMode("historico")}
+                  >
+                    Historico
+                  </button>
+                  <button
+                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 ${
+                      trendMode === "filtrado"
+                        ? "bg-eis-navy text-white"
+                        : "text-slate-600 hover:bg-slate-100 active:bg-slate-200"
+                    }`}
+                    onClick={() => setTrendMode("filtrado")}
+                  >
+                    Periodo filtrado
+                  </button>
+                </div>
+              </div>
               <p className="mb-3 text-xs text-slate-500">
+                {trendMode === "historico"
+                  ? "Vista historica por sucursal."
+                  : "Vista segun filtros de mes/rango."}{" "}
                 Variacion vs periodo anterior:{" "}
                 {variacionVentas === null ? "N/A" : `${variacionVentas.toFixed(2)}%`}
               </p>
+              {trendMode === "filtrado" && selectedRange === 1 ? (
+                <p className="mb-3 rounded-md bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
+                  En modo filtrado se incluye tambien el mes anterior para mostrar tendencia minima.
+                </p>
+              ) : null}
               <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={trendData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis dataKey="periodo" />
-                    <YAxis />
-                    <Tooltip formatter={(value) => money(value)} />
-                    <Line type="monotone" dataKey="total" stroke="#0b1d3a" strokeWidth={3} />
-                  </LineChart>
-                </ResponsiveContainer>
+                {activeTrendData.length === 0 ? (
+                  <div className="flex h-full items-center justify-center rounded-lg bg-slate-50">
+                    <p className="text-sm text-slate-500">
+                      No hay datos para mostrar en este modo de tendencia.
+                    </p>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={activeTrendData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis dataKey="periodo" />
+                      <YAxis />
+                      <Tooltip formatter={(value) => money(value)} />
+                      <Line type="monotone" dataKey="total" stroke="#0b1d3a" strokeWidth={3} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
               </div>
             </article>
           </section>
 
-          <section id="comparativo" className="scroll-mt-28">
+          <section id="comparativo" className="scroll-mt-44">
             <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
               <h3 className="mb-3 text-lg font-semibold text-eis-navy">Comparativa real vs meta por sucursal</h3>
               <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={compareBySucursal}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis dataKey="sucursal" />
-                    <YAxis />
-                    <Tooltip formatter={(value) => money(value)} />
-                    <Legend />
-                    <Bar dataKey="ventas" fill="#0b1d3a" name="Ventas" radius={[6, 6, 0, 0]} />
-                    <Bar dataKey="meta" fill="#22d3ee" name="Meta" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                {hasComparativoData ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={compareBySucursal}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis dataKey="sucursal" />
+                      <YAxis />
+                      <Tooltip formatter={(value) => money(value)} />
+                      <Legend />
+                      <Bar dataKey="ventas" fill="#0b1d3a" name="Ventas" radius={[6, 6, 0, 0]} />
+                      <Bar dataKey="meta" fill="#22d3ee" name="Meta" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center gap-3 rounded-lg bg-slate-50 p-4 text-center">
+                    <p className="text-sm text-slate-600">
+                      No hay datos para la comparativa en el periodo seleccionado.
+                    </p>
+                    <button
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100"
+                      onClick={resetFilters}
+                    >
+                      Volver al ultimo periodo con datos
+                    </button>
+                  </div>
+                )}
               </div>
             </article>
           </section>
@@ -1032,24 +1353,61 @@ export default function DashboardPage() {
             <div className="h-px bg-slate-200" />
           </div>
 
-          <section id="utilidad" className="scroll-mt-28">
+          <section id="utilidad" className="scroll-mt-44">
             <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
-              <h3 className="mb-3 text-lg font-semibold text-eis-navy">Utilidad mensual</h3>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-lg font-semibold text-eis-navy">Utilidad mensual</h3>
+                <div className="inline-flex rounded-lg border border-slate-300 bg-white p-1">
+                  <button
+                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 ${
+                      utilidadMode === "historico"
+                        ? "bg-eis-navy text-white"
+                        : "text-slate-600 hover:bg-slate-100 active:bg-slate-200"
+                    }`}
+                    onClick={() => setUtilidadMode("historico")}
+                  >
+                    Historico
+                  </button>
+                  <button
+                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 ${
+                      utilidadMode === "filtrado"
+                        ? "bg-eis-navy text-white"
+                        : "text-slate-600 hover:bg-slate-100 active:bg-slate-200"
+                    }`}
+                    onClick={() => setUtilidadMode("filtrado")}
+                  >
+                    Periodo filtrado
+                  </button>
+                </div>
+              </div>
+              {utilidadMode === "filtrado" && selectedRange === 1 ? (
+                <p className="mb-3 rounded-md bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
+                  En modo filtrado se incluye tambien el mes anterior para mostrar tendencia minima.
+                </p>
+              ) : null}
               <div className="h-72">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={utilidadMensualData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis dataKey="periodo" />
-                    <YAxis />
-                    <Tooltip formatter={(value) => money(value)} />
-                    <Line type="monotone" dataKey="utilidad" stroke="#14b8a6" strokeWidth={3} />
-                  </LineChart>
-                </ResponsiveContainer>
+                {activeUtilidadData.length === 0 ? (
+                  <div className="flex h-full items-center justify-center rounded-lg bg-slate-50">
+                    <p className="text-sm text-slate-500">
+                      No hay datos para mostrar en este modo de utilidad.
+                    </p>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={activeUtilidadData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis dataKey="periodo" />
+                      <YAxis />
+                      <Tooltip formatter={(value) => money(value)} />
+                      <Line type="monotone" dataKey="utilidad" stroke="#14b8a6" strokeWidth={3} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
               </div>
             </article>
           </section>
 
-          <section id="periodos" className="scroll-mt-28">
+          <section id="periodos" className="scroll-mt-44">
             <article className="overflow-auto rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
               <h3 className="mb-3 text-lg font-semibold text-eis-navy">Comparativa de utilidad</h3>
               <table className="min-w-full text-left text-sm">
@@ -1081,7 +1439,7 @@ export default function DashboardPage() {
             </article>
           </section>
 
-          <section id="gastos" className="grid gap-4 xl:grid-cols-2 scroll-mt-28">
+          <section id="gastos" className="grid gap-4 scroll-mt-44 xl:grid-cols-2">
             <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
               <h3 className="mb-3 text-lg font-semibold text-eis-navy">Distribucion de gastos</h3>
               <div className="h-72">
@@ -1139,7 +1497,56 @@ export default function DashboardPage() {
             </article>
           </section>
 
-          <section id="detalle" className="scroll-mt-28">
+          <section id="exportar" className="scroll-mt-44">
+            <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-eis-navy">Exportar datos</h3>
+                  <p className="text-xs text-slate-500">
+                    Selecciona formato y dataset para descargar el archivo.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={exportFormat}
+                    onChange={(e) => setExportFormat(e.target.value)}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-150 outline-none focus-visible:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-100"
+                    aria-label="Formato de exportacion"
+                  >
+                    <option value="csv">CSV</option>
+                    <option value="xlsx">Excel</option>
+                    <option value="pdf">PDF</option>
+                  </select>
+                  <button
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100"
+                    onClick={exportDetalle}
+                  >
+                    Exportar detalle
+                  </button>
+                  <button
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100"
+                    onClick={exportVentas}
+                  >
+                    Exportar ventas
+                  </button>
+                  <button
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100"
+                    onClick={exportGastos}
+                  >
+                    Exportar gastos
+                  </button>
+                  <button
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100"
+                    onClick={exportMetas}
+                  >
+                    Exportar metas
+                  </button>
+                </div>
+              </div>
+            </article>
+          </section>
+
+          <section id="detalle" className="scroll-mt-44">
             <article className="overflow-auto rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h3 className="text-lg font-semibold text-eis-navy">Detalle por sucursal</h3>
@@ -1149,32 +1556,8 @@ export default function DashboardPage() {
                     value={detalleSearch}
                     onChange={(e) => setDetalleSearch(e.target.value)}
                     placeholder="Buscar sucursal..."
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 transition-colors duration-150 outline-none focus-visible:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-100"
                   />
-                  <button
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                    onClick={exportDetalleCsv}
-                  >
-                    Detalle CSV
-                  </button>
-                  <button
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                    onClick={exportVentasCsv}
-                  >
-                    Ventas CSV
-                  </button>
-                  <button
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                    onClick={exportGastosCsv}
-                  >
-                    Gastos CSV
-                  </button>
-                  <button
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                    onClick={exportMetasCsv}
-                  >
-                    Metas CSV
-                  </button>
                 </div>
               </div>
               <table className="min-w-full text-left text-sm">
@@ -1238,12 +1621,13 @@ export default function DashboardPage() {
               </table>
             </article>
           </section>
+          </div>
         </section>
       </div>
 
       {showBackToTop ? (
         <button
-          className="fixed bottom-6 right-6 z-30 inline-flex h-11 w-11 items-center justify-center rounded-full bg-eis-navy text-xl font-bold text-white shadow-soft hover:bg-slate-800"
+          className="fixed bottom-6 right-6 z-30 inline-flex h-11 w-11 items-center justify-center rounded-full bg-eis-navy text-xl font-bold text-white shadow-soft transition-colors duration-150 hover:bg-slate-800 active:bg-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100"
           onClick={goTop}
           aria-label="Volver arriba"
         >

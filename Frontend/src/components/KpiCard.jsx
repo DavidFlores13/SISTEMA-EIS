@@ -16,10 +16,10 @@ export function KpiCard({ title, value, subtitle, subtitleTone = "neutral", tone
         : "text-slate-500";
 
   return (
-    <article className={`rounded-xl border p-4 shadow-soft backdrop-blur ${toneClass}`}>
+    <article className={`flex flex-col rounded-xl border p-4 shadow-soft backdrop-blur ${toneClass}`}>
       <p className="text-sm text-slate-500">{title}</p>
       <h3 className="mt-2 text-[2rem] font-semibold leading-tight text-eis-navy">{value}</h3>
-      {subtitle ? <p className={`mt-1 text-xs ${subtitleToneClass}`}>{subtitle}</p> : null}
+      {subtitle ? <p className={`mt-2 text-xs ${subtitleToneClass}`}>{subtitle}</p> : null}
     </article>
   );
 }
