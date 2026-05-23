@@ -16,7 +16,22 @@ export function KpiCard({ title, value, subtitle, subtitleTone = "neutral", tone
         : "text-slate-500";
 
   return (
-    <article className={`flex flex-col rounded-xl border p-4 shadow-soft backdrop-blur ${toneClass}`}>
+    <article
+  className={`
+    flex flex-col
+    rounded-3xl
+    border
+    p-5
+    shadow-sm
+    backdrop-blur
+    transition-all
+    duration-300
+    hover:-translate-y-1
+    hover:shadow-xl
+    hover:border-cyan-100
+    ${toneClass}
+  `}
+>
       <p className="text-sm text-slate-500">{title}</p>
       <h3 className="mt-2 text-[2rem] font-semibold leading-tight">
         {typeof value === "string" || typeof value === "number" ? (

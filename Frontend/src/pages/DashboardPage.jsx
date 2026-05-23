@@ -1011,7 +1011,7 @@ export default function DashboardPage() {
             </div>
           </header>
 
-          <div className="space-y-5 pt-5 lg:pt-[9.75rem]">
+          <div className="space-y-5 pt-5 lg:pt-[8.75rem]">
             {error ? (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 p-3">
                 <p className="text-sm text-red-700">{error}</p>
