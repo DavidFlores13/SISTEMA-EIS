@@ -36,8 +36,8 @@ const SECTION_ITEMS = [
   { id: "utilidad", label: "Utilidad mensual" },
   { id: "periodos", label: "Comparativa de utilidad" },
   { id: "gastos", label: "Gastos" },
-  { id: "exportar", label: "Exportar datos" },
   { id: "detalle", label: "Detalle por sucursal" },
+  { id: "exportar", label: "Exportar datos" },
 ];
 const MONTH_NAMES = [
   "Enero",
