@@ -1,3 +1,4 @@
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { utils as xlsxUtils, writeFile as writeXlsxFile } from "xlsx";
 import { jsPDF } from "jspdf";
@@ -23,6 +24,7 @@ import { useFilters } from "../context/FiltersContext";
 import { checkApiConnection, getGastos, getMetas, getSucursales, getVentas } from "../services/api";
 import { KpiCard } from "../components/KpiCard";
 import { FiltersBar } from "../components/FiltersBar";
+import { NeonMoney } from "../components/NeonMoney";
 
 const PIE_COLORS = ["#0b1d3a", "#22d3ee", "#2dd42d", "#0ea5e9", "#b8b514", "#1d4ed8"];
 const SECTION_ITEMS = [
@@ -150,11 +152,7 @@ function EstadoChip({ estado }) {
         ? "border-amber-300 bg-amber-50 text-amber-700"
         : "border-red-300 bg-red-50 text-red-700";
 
-  return (
-    <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${tone}`}>
-      {getEstadoLabel(estado)}
-    </span>
-  );
+  return <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${tone}`}>{getEstadoLabel(estado)}</span>;
 }
 
 export default function DashboardPage() {
@@ -176,6 +174,7 @@ export default function DashboardPage() {
   const [latestPeriod, setLatestPeriod] = useState(null);
   const [toast, setToast] = useState(null);
   const [topFiltersOpen, setTopFiltersOpen] = useState(false);
+
   const [trendMode, setTrendMode] = useState(() => {
     try {
       const raw = localStorage.getItem("eis_dashboard_prefs_v1");
@@ -186,6 +185,7 @@ export default function DashboardPage() {
       return "historico";
     }
   });
+
   const [utilidadMode, setUtilidadMode] = useState(() => {
     try {
       const raw = localStorage.getItem("eis_dashboard_prefs_v1");
@@ -196,13 +196,17 @@ export default function DashboardPage() {
       return "historico";
     }
   });
+
   const [reloadTick, setReloadTick] = useState(0);
   const [exportFormat, setExportFormat] = useState("csv");
   const [detalleSearch, setDetalleSearch] = useState("");
   const [detalleSort, setDetalleSort] = useState({ key: "cumplimiento_pct", dir: "desc" });
+
   const scrollLockRef = useRef(false);
   const scrollLockTimerRef = useRef(null);
+
   const DASHBOARD_PREFS_KEY = "eis_dashboard_prefs_v1";
+
   const sectionItems = useMemo(
     () =>
       selectedSucursalId
@@ -221,7 +225,7 @@ export default function DashboardPage() {
         })
       );
     } catch {
-      // Ignorar errores de almacenamiento local.
+      // ignore
     }
   }, [trendMode, utilidadMode]);
 
@@ -262,10 +266,12 @@ export default function DashboardPage() {
       if (scrollLockRef.current) return;
       let current = sectionItems[0]?.id || "resumen";
       const scrollMarker = window.scrollY + 150;
-      const sections = sectionItems.map((section) => {
-        const el = document.getElementById(section.id);
-        return el ? { id: section.id, top: el.offsetTop } : null;
-      }).filter(Boolean);
+      const sections = sectionItems
+        .map((section) => {
+          const el = document.getElementById(section.id);
+          return el ? { id: section.id, top: el.offsetTop } : null;
+        })
+        .filter(Boolean);
 
       for (let i = 0; i < sections.length; i += 1) {
         const thisTop = sections[i].top;
@@ -276,8 +282,7 @@ export default function DashboardPage() {
         }
       }
 
-      const isAtBottom =
-        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+      const isAtBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
       if (isAtBottom) {
         current = sectionItems[sectionItems.length - 1]?.id || current;
       }
@@ -319,21 +324,16 @@ export default function DashboardPage() {
         setError("");
         setLastUpdated(new Date());
 
-        // Si el periodo actual no tiene datos, mover filtros al ultimo periodo disponible.
         const periodSet = new Set();
         ventasData.forEach((item) => periodSet.add(monthKey(item.fecha)));
         gastosData.forEach((item) => periodSet.add(monthKey(item.fecha)));
-        metasData.forEach((item) =>
-          periodSet.add(`${item.anio}-${String(item.mes).padStart(2, "0")}`)
-        );
+        metasData.forEach((item) => periodSet.add(`${item.anio}-${String(item.mes).padStart(2, "0")}`));
 
-        const availablePeriods = Array.from(periodSet).filter(Boolean).sort((a, b) =>
-          a.localeCompare(b)
-        );
+        const availablePeriods = Array.from(periodSet).filter(Boolean).sort((a, b) => a.localeCompare(b));
         const currentPeriod = `${filters.anio}-${String(filters.mes).padStart(2, "0")}`;
         if (availablePeriods.length > 0 && !periodSet.has(currentPeriod)) {
-          const latestPeriod = availablePeriods[availablePeriods.length - 1];
-          const [anio, mes] = latestPeriod.split("-");
+          const latest = availablePeriods[availablePeriods.length - 1];
+          const [anio, mes] = latest.split("-");
           updateFilters({ anio: Number(anio), mes: Number(mes) });
         }
         if (availablePeriods.length > 0) {
@@ -352,7 +352,7 @@ export default function DashboardPage() {
     return () => {
       mounted = false;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const selectedRange = Number(filters.rango_meses || 1);
@@ -387,10 +387,12 @@ export default function DashboardPage() {
     () => scopedVentas.filter((x) => previousRangeSet.has(monthKey(x.fecha))),
     [scopedVentas, previousRangeSet]
   );
+
   const periodGastos = useMemo(
     () => scopedGastos.filter((x) => activePeriodSet.has(monthKey(x.fecha))),
     [scopedGastos, activePeriodSet]
   );
+
   const periodMetas = useMemo(
     () =>
       scopedMetas.filter((x) =>
@@ -398,6 +400,7 @@ export default function DashboardPage() {
       ),
     [scopedMetas, activePeriodSet]
   );
+
   const prevRangeGastos = useMemo(
     () => scopedGastos.filter((x) => previousRangeSet.has(monthKey(x.fecha))),
     [scopedGastos, previousRangeSet]
@@ -409,56 +412,42 @@ export default function DashboardPage() {
       ),
     [scopedMetas, previousRangeSet]
   );
+
   const hasNoDataForSelection =
-    !loading &&
-    !error &&
-    periodVentas.length === 0 &&
-    periodGastos.length === 0 &&
-    periodMetas.length === 0;
+    !loading && !error && periodVentas.length === 0 && periodGastos.length === 0 && periodMetas.length === 0;
 
   const totalVentasPeriodo = periodVentas.reduce((acc, x) => acc + Number(x.monto_total || 0), 0);
   const totalVentasPrevio = prevPeriodVentas.reduce((acc, x) => acc + Number(x.monto_total || 0), 0);
   const totalVentasPrevioRango = prevRangeVentas.reduce((acc, x) => acc + Number(x.monto_total || 0), 0);
-  const totalTransaccionesPeriodo = periodVentas.reduce(
-    (acc, x) => acc + Number(x.cantidad_transacciones || 0),
-    0
-  );
-  const totalTransaccionesPrevio = prevPeriodVentas.reduce(
-    (acc, x) => acc + Number(x.cantidad_transacciones || 0),
-    0
-  );
+  const totalTransaccionesPeriodo = periodVentas.reduce((acc, x) => acc + Number(x.cantidad_transacciones || 0), 0);
+  const totalTransaccionesPrevio = prevPeriodVentas.reduce((acc, x) => acc + Number(x.cantidad_transacciones || 0), 0);
   const totalGastosPeriodo = periodGastos.reduce((acc, x) => acc + Number(x.monto || 0), 0);
   const totalMetaPeriodo = periodMetas.reduce((acc, x) => acc + Number(x.valor_objetivo || 0), 0);
   const totalGastosPrevioRango = prevRangeGastos.reduce((acc, x) => acc + Number(x.monto || 0), 0);
   const totalMetaPrevioRango = prevRangeMetas.reduce((acc, x) => acc + Number(x.valor_objetivo || 0), 0);
+
   const utilidadPeriodo = totalVentasPeriodo - totalGastosPeriodo;
   const utilidadPreviaRango = totalVentasPrevioRango - totalGastosPrevioRango;
+
   const cumplimientoPct = totalMetaPeriodo === 0 ? 0 : (totalVentasPeriodo / totalMetaPeriodo) * 100;
-  const cumplimientoPctPrevio =
-    totalMetaPrevioRango === 0 ? 0 : (totalVentasPrevioRango / totalMetaPrevioRango) * 100;
+  const cumplimientoPctPrevio = totalMetaPrevioRango === 0 ? 0 : (totalVentasPrevioRango / totalMetaPrevioRango) * 100;
   const estado = getEstado(cumplimientoPct);
+
   const variacionVentas = totalVentasPrevio === 0 ? null : ((totalVentasPeriodo - totalVentasPrevio) / totalVentasPrevio) * 100;
-  const variacionTransacciones =
-    totalTransaccionesPrevio === 0
-      ? null
-      : ((totalTransaccionesPeriodo - totalTransaccionesPrevio) / totalTransaccionesPrevio) * 100;
-  const ticketPromedioPeriodo =
-    totalTransaccionesPeriodo === 0 ? 0 : totalVentasPeriodo / totalTransaccionesPeriodo;
-  const ticketPromedioPrevio =
-    totalTransaccionesPrevio === 0 ? 0 : totalVentasPrevio / totalTransaccionesPrevio;
-  const variacionTicketPromedio =
-    ticketPromedioPrevio === 0
-      ? null
-      : ((ticketPromedioPeriodo - ticketPromedioPrevio) / ticketPromedioPrevio) * 100;
+  const variacionTransacciones = totalTransaccionesPrevio === 0 ? null : ((totalTransaccionesPeriodo - totalTransaccionesPrevio) / totalTransaccionesPrevio) * 100;
+  const ticketPromedioPeriodo = totalTransaccionesPeriodo === 0 ? 0 : totalVentasPeriodo / totalTransaccionesPeriodo;
+  const ticketPromedioPrevio = totalTransaccionesPrevio === 0 ? 0 : totalVentasPrevio / totalTransaccionesPrevio;
+  const variacionTicketPromedio = ticketPromedioPrevio === 0 ? null : ((ticketPromedioPeriodo - ticketPromedioPrevio) / ticketPromedioPrevio) * 100;
+
   const diferenciaPeriodoAnterior = totalVentasPeriodo - totalVentasPrevioRango;
-  const diferenciaPctPeriodoAnterior =
-    totalVentasPrevioRango === 0 ? null : (diferenciaPeriodoAnterior / totalVentasPrevioRango) * 100;
+  const diferenciaPctPeriodoAnterior = totalVentasPrevioRango === 0 ? null : (diferenciaPeriodoAnterior / totalVentasPrevioRango) * 100;
+
   const diferenciaGastos = totalGastosPeriodo - totalGastosPrevioRango;
-  const diferenciaGastosPct =
-    totalGastosPrevioRango === 0 ? null : (diferenciaGastos / totalGastosPrevioRango) * 100;
+  const diferenciaGastosPct = totalGastosPrevioRango === 0 ? null : (diferenciaGastos / totalGastosPrevioRango) * 100;
+
   const diferenciaUtilidad = utilidadPeriodo - utilidadPreviaRango;
-  const diferenciaUtilidadPct =
-    utilidadPreviaRango === 0 ? null : (diferenciaUtilidad / utilidadPreviaRango) * 100;
+  const diferenciaUtilidadPct = utilidadPreviaRango === 0 ? null : (diferenciaUtilidad / utilidadPreviaRango) * 100;
+
   const diferenciaCumplimiento = cumplimientoPct - cumplimientoPctPrevio;
 
   const trendData = useMemo(() => {
@@ -471,17 +460,18 @@ export default function DashboardPage() {
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([periodo, total]) => ({ periodo, total }));
   }, [scopedVentas]);
+
   const trendDataFiltered = useMemo(() => {
     const map = new Map();
     for (const item of scopedVentas) {
       const key = monthKey(item.fecha);
       map.set(key, (map.get(key) || 0) + Number(item.monto_total || 0));
     }
-    const keys = Array.from(new Set([...activePeriodKeys, prevPeriod.key])).sort((a, b) =>
-      a.localeCompare(b)
-    );
+
+    const keys = Array.from(new Set([...activePeriodKeys, prevPeriod.key])).sort((a, b) => a.localeCompare(b));
     return keys.map((periodo) => ({ periodo, total: map.get(periodo) || 0 }));
   }, [scopedVentas, activePeriodKeys, prevPeriod.key]);
+
   const activeTrendData = trendMode === "historico" ? trendData : trendDataFiltered;
 
   const gastosPorCategoria = useMemo(() => {
@@ -511,9 +501,7 @@ export default function DashboardPage() {
 
       const metaSucursal = metas
         .filter(
-          (x) =>
-            x.id_sucursal === sucursal.id &&
-            activePeriodSet.has(`${x.anio}-${String(x.mes).padStart(2, "0")}`)
+          (x) => x.id_sucursal === sucursal.id && activePeriodSet.has(`${x.anio}-${String(x.mes).padStart(2, "0")}`)
         )
         .reduce((acc, x) => acc + Number(x.valor_objetivo || 0), 0);
 
@@ -531,9 +519,8 @@ export default function DashboardPage() {
       };
     });
   }, [selectedSucursalId, sucursales, ventas, gastos, metas, activePeriodSet]);
-  const hasComparativoData = compareBySucursal.some(
-    (row) => row.ventas > 0 || row.meta > 0 || row.gastos > 0
-  );
+
+  const hasComparativoData = compareBySucursal.some((row) => row.ventas > 0 || row.meta > 0 || row.gastos > 0);
 
   const compareVsAnteriorBySucursal = useMemo(() => {
     const targetSucursales = selectedSucursalId
@@ -547,6 +534,7 @@ export default function DashboardPage() {
       const actualGastos = gastos
         .filter((x) => x.id_sucursal === sucursal.id && activePeriodSet.has(monthKey(x.fecha)))
         .reduce((acc, x) => acc + Number(x.monto || 0), 0);
+
       const anteriorVentas = ventas
         .filter((x) => x.id_sucursal === sucursal.id && previousRangeSet.has(monthKey(x.fecha)))
         .reduce((acc, x) => acc + Number(x.monto_total || 0), 0);
@@ -569,10 +557,9 @@ export default function DashboardPage() {
       };
     });
   }, [selectedSucursalId, sucursales, ventas, gastos, activePeriodSet, previousRangeSet]);
+
   const rankingSucursales = useMemo(() => {
-    const prevById = new Map(
-      compareVsAnteriorBySucursal.map((row) => [row.id_sucursal, row])
-    );
+    const prevById = new Map(compareVsAnteriorBySucursal.map((row) => [row.id_sucursal, row]));
     return [...compareBySucursal]
       .map((row) => {
         const prev = prevById.get(row.id_sucursal);
@@ -589,86 +576,65 @@ export default function DashboardPage() {
   const utilidadMensualData = useMemo(() => {
     const mapVentas = new Map();
     const mapGastos = new Map();
+
     for (const item of scopedVentas) {
       const key = monthKey(item.fecha);
       mapVentas.set(key, (mapVentas.get(key) || 0) + Number(item.monto_total || 0));
     }
+
     for (const item of scopedGastos) {
       const key = monthKey(item.fecha);
       mapGastos.set(key, (mapGastos.get(key) || 0) + Number(item.monto || 0));
     }
-    const keys = Array.from(new Set([...mapVentas.keys(), ...mapGastos.keys()])).sort((a, b) =>
-      a.localeCompare(b)
-    );
+
+    const keys = Array.from(new Set([...mapVentas.keys(), ...mapGastos.keys()])).sort((a, b) => a.localeCompare(b));
+
     return keys.map((k) => ({
       periodo: k,
       utilidad: (mapVentas.get(k) || 0) - (mapGastos.get(k) || 0),
     }));
   }, [scopedVentas, scopedGastos]);
+
   const utilidadMensualDataFiltered = useMemo(() => {
     const mapVentas = new Map();
     const mapGastos = new Map();
+
     for (const item of scopedVentas) {
       const key = monthKey(item.fecha);
       mapVentas.set(key, (mapVentas.get(key) || 0) + Number(item.monto_total || 0));
     }
+
     for (const item of scopedGastos) {
       const key = monthKey(item.fecha);
       mapGastos.set(key, (mapGastos.get(key) || 0) + Number(item.monto || 0));
     }
-    const keys = Array.from(new Set([...activePeriodKeys, prevPeriod.key])).sort((a, b) =>
-      a.localeCompare(b)
-    );
+
+    const keys = Array.from(new Set([...activePeriodKeys, prevPeriod.key])).sort((a, b) => a.localeCompare(b));
+
     return keys.map((k) => ({
       periodo: k,
       utilidad: (mapVentas.get(k) || 0) - (mapGastos.get(k) || 0),
     }));
   }, [scopedVentas, scopedGastos, activePeriodKeys, prevPeriod.key]);
-  const activeUtilidadData =
-    utilidadMode === "historico" ? utilidadMensualData : utilidadMensualDataFiltered;
 
+  const activeUtilidadData = utilidadMode === "historico" ? utilidadMensualData : utilidadMensualDataFiltered;
 
   const alerts = useMemo(() => {
     const list = [];
     if (estado === "rojo") {
-      list.push({
-        id: "a1",
-        text: "Cumplimiento de meta en estado Critica (<80%).",
-        target: "resumen",
-        actionable: false,
-      });
+      list.push({ id: "a1", text: "Cumplimiento de meta en estado Critica (<80%).", target: "resumen", actionable: false });
     }
     if (estado === "amarillo") {
-      list.push({
-        id: "a2",
-        text: "Cumplimiento de meta En riesgo (80%-99%).",
-        target: "resumen",
-        actionable: false,
-      });
+      list.push({ id: "a2", text: "Cumplimiento de meta En riesgo (80%-99%).", target: "resumen", actionable: false });
     }
     if (utilidadPeriodo < 0) {
-      list.push({
-        id: "a3",
-        text: "La utilidad del periodo es negativa.",
-        target: "periodos",
-        actionable: true,
-      });
+      list.push({ id: "a3", text: "La utilidad del periodo es negativa.", target: "periodos", actionable: true });
     }
     if (variacionVentas !== null && variacionVentas < 0) {
-      list.push({
-        id: "a4",
-        text: "Las ventas bajaron respecto al periodo anterior.",
-        target: "tendencia",
-        actionable: true,
-      });
+      list.push({ id: "a4", text: "Las ventas bajaron respecto al periodo anterior.", target: "tendencia", actionable: true });
     }
     if (compareBySucursal.some((x) => x.cumplimiento_pct < 80)) {
-      list.push({
-        id: "a5",
-        text: "Hay sucursales por debajo de 80% de cumplimiento.",
-        target: "detalle",
-        actionable: true,
-      });
+      list.push({ id: "a5", text: "Hay sucursales por debajo de 80% de cumplimiento.", target: "detalle", actionable: true });
     }
     return list;
   }, [estado, utilidadPeriodo, variacionVentas, compareBySucursal]);
@@ -678,18 +644,13 @@ export default function DashboardPage() {
     ? sucursales.find((s) => s.id === selectedSucursalId)?.nombre || `Sucursal ${selectedSucursalId}`
     : "Todas";
   const selectedMonthName = MONTH_NAMES[(filters.mes || 1) - 1] || `Mes ${filters.mes}`;
-  const selectedRangeLabel =
-    Number(filters.rango_meses || 1) === 1
-      ? "Mes actual"
-      : `Ultimos ${Number(filters.rango_meses || 1)} meses`;
+  const selectedRangeLabel = Number(filters.rango_meses || 1) === 1 ? "Mes actual" : `Ultimos ${Number(filters.rango_meses || 1)} meses`;
 
   const filteredSortedDetalleRows = useMemo(() => {
     const query = detalleSearch.trim().toLowerCase();
-    const filtered = compareBySucursal.filter((row) =>
-      row.sucursal.toLowerCase().includes(query)
-    );
+    const filtered = compareBySucursal.filter((row) => row.sucursal.toLowerCase().includes(query));
 
-    const sorted = [...filtered].sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       const { key, dir } = detalleSort;
       const factor = dir === "asc" ? 1 : -1;
       const va = a[key];
@@ -699,8 +660,6 @@ export default function DashboardPage() {
       }
       return (Number(va) - Number(vb)) * factor;
     });
-
-    return sorted;
   }, [compareBySucursal, detalleSearch, detalleSort]);
 
   const sortIndicator = (key) => {
@@ -746,82 +705,17 @@ export default function DashboardPage() {
   const resetFilters = () => {
     if (latestPeriod) {
       const [anio, mes] = latestPeriod.split("-");
-      updateFilters({
-        anio: Number(anio),
-        mes: Number(mes),
-        id_sucursal: "",
-        rango_meses: 1,
-      });
+      updateFilters({ anio: Number(anio), mes: Number(mes), id_sucursal: "", rango_meses: 1 });
       return;
     }
     const now = new Date();
-    updateFilters({
-      anio: now.getFullYear(),
-      mes: now.getMonth() + 1,
-      id_sucursal: "",
-      rango_meses: 1,
-    });
+    updateFilters({ anio: now.getFullYear(), mes: now.getMonth() + 1, id_sucursal: "", rango_meses: 1 });
   };
 
   const toneFromDiff = (diff) => {
     if (diff > 0) return "up";
     if (diff < 0) return "down";
     return "neutral";
-  };
-
-  const exportDetalle = () => {
-    const header = ["Sucursal", "Ventas", "Gastos", "Utilidad", "Meta", "CumplimientoPct", "Estado"];
-    const rows = compareBySucursal.map((row) => ({
-      Sucursal: row.sucursal,
-      Ventas: row.ventas.toFixed(2),
-      Gastos: row.gastos.toFixed(2),
-      Utilidad: row.utilidad.toFixed(2),
-      Meta: row.meta.toFixed(2),
-      CumplimientoPct: row.cumplimiento_pct.toFixed(2),
-      Estado: getEstadoLabel(row.estado),
-    }));
-    exportData(
-      "detalle_sucursales",
-      header,
-      rows
-    );
-  };
-
-  const exportVentas = () => {
-    const header = ["fecha", "id_sucursal", "sucursal", "monto_total", "cantidad_transacciones"];
-    const rows = periodVentas.map((v) => ({
-      fecha: v.fecha,
-      id_sucursal: v.id_sucursal,
-      sucursal: sucursales.find((s) => s.id === v.id_sucursal)?.nombre || v.id_sucursal,
-      monto_total: Number(v.monto_total || 0).toFixed(2),
-      cantidad_transacciones: v.cantidad_transacciones,
-    }));
-    exportData("ventas", header, rows);
-  };
-
-  const exportGastos = () => {
-    const header = ["fecha", "id_sucursal", "sucursal", "categoria", "monto"];
-    const rows = periodGastos.map((g) => ({
-      fecha: g.fecha,
-      id_sucursal: g.id_sucursal,
-      sucursal: sucursales.find((s) => s.id === g.id_sucursal)?.nombre || g.id_sucursal,
-      categoria: g.categoria,
-      monto: Number(g.monto || 0).toFixed(2),
-    }));
-    exportData("gastos", header, rows);
-  };
-
-  const exportMetas = () => {
-    const header = ["anio", "mes", "id_sucursal", "sucursal", "nombre_kpi", "valor_objetivo"];
-    const rows = periodMetas.map((m) => ({
-      anio: m.anio,
-      mes: m.mes,
-      id_sucursal: m.id_sucursal,
-      sucursal: sucursales.find((s) => s.id === m.id_sucursal)?.nombre || m.id_sucursal,
-      nombre_kpi: m.nombre_kpi,
-      valor_objetivo: Number(m.valor_objetivo || 0).toFixed(2),
-    }));
-    exportData("metas", header, rows);
   };
 
   const exportData = (prefix, header, rows) => {
@@ -840,11 +734,7 @@ export default function DashboardPage() {
   const exportCsv = (baseFilename, header, rows) => {
     try {
       const csv = [header, ...rows.map((r) => header.map((h) => r[h]))]
-        .map((cols) =>
-          cols
-            .map((value) => `"${String(value).replace(/"/g, '""')}"`)
-            .join(",")
-        )
+        .map((cols) => cols.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","))
         .join("\n");
 
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -897,6 +787,57 @@ export default function DashboardPage() {
     } catch {
       setToast({ type: "error", message: "No se pudo exportar el PDF." });
     }
+  };
+
+  const exportDetalle = () => {
+    const header = ["Sucursal", "Ventas", "Gastos", "Utilidad", "Meta", "CumplimientoPct", "Estado"];
+    const rows = compareBySucursal.map((row) => ({
+      Sucursal: row.sucursal,
+      Ventas: row.ventas.toFixed(2),
+      Gastos: row.gastos.toFixed(2),
+      Utilidad: row.utilidad.toFixed(2),
+      Meta: row.meta.toFixed(2),
+      CumplimientoPct: row.cumplimiento_pct.toFixed(2),
+      Estado: getEstadoLabel(row.estado),
+    }));
+    exportData("detalle_sucursales", header, rows);
+  };
+
+  const exportVentas = () => {
+    const header = ["fecha", "id_sucursal", "sucursal", "monto_total", "cantidad_transacciones"];
+    const rows = periodVentas.map((v) => ({
+      fecha: v.fecha,
+      id_sucursal: v.id_sucursal,
+      sucursal: sucursales.find((s) => s.id === v.id_sucursal)?.nombre || v.id_sucursal,
+      monto_total: Number(v.monto_total || 0).toFixed(2),
+      cantidad_transacciones: v.cantidad_transacciones,
+    }));
+    exportData("ventas", header, rows);
+  };
+
+  const exportGastos = () => {
+    const header = ["fecha", "id_sucursal", "sucursal", "categoria", "monto"];
+    const rows = periodGastos.map((g) => ({
+      fecha: g.fecha,
+      id_sucursal: g.id_sucursal,
+      sucursal: sucursales.find((s) => s.id === g.id_sucursal)?.nombre || g.id_sucursal,
+      categoria: g.categoria,
+      monto: Number(g.monto || 0).toFixed(2),
+    }));
+    exportData("gastos", header, rows);
+  };
+
+  const exportMetas = () => {
+    const header = ["anio", "mes", "id_sucursal", "sucursal", "nombre_kpi", "valor_objetivo"];
+    const rows = periodMetas.map((m) => ({
+      anio: m.anio,
+      mes: m.mes,
+      id_sucursal: m.id_sucursal,
+      sucursal: sucursales.find((s) => s.id === m.id_sucursal)?.nombre || m.id_sucursal,
+      nombre_kpi: m.nombre_kpi,
+      valor_objetivo: Number(m.valor_objetivo || 0).toFixed(2),
+    }));
+    exportData("metas", header, rows);
   };
 
   return (
@@ -985,7 +926,7 @@ export default function DashboardPage() {
               <p className="px-1 pt-1 text-[11px] uppercase tracking-wider text-cyan-200/80">Vision general</p>
               {sectionItems.slice(0, 3).map((item) => (
                 <button
-                key={item.id}
+                  key={item.id}
                   className={`w-full rounded-lg px-2.5 py-1.5 text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200/60 ${
                     activeSection === item.id ? "bg-white/15 font-medium" : "text-cyan-100/90 hover:bg-white/10"
                   }`}
@@ -998,7 +939,7 @@ export default function DashboardPage() {
               <p className="px-1 pt-3 text-[11px] uppercase tracking-wider text-cyan-200/80">Operacion</p>
               {sectionItems.slice(3).map((item) => (
                 <button
-                key={item.id}
+                  key={item.id}
                   className={`w-full rounded-lg px-2.5 py-1.5 text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-200/60 ${
                     activeSection === item.id ? "bg-white/15 font-medium" : "text-cyan-100/90 hover:bg-white/10"
                   }`}
@@ -1069,6 +1010,7 @@ export default function DashboardPage() {
               </div>
             </div>
           </header>
+
           <div className="space-y-5 pt-5 lg:pt-[9.75rem]">
             {error ? (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 p-3">
@@ -1081,6 +1023,7 @@ export default function DashboardPage() {
                 </button>
               </div>
             ) : null}
+
             {hasNoDataForSelection ? (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
                 <p className="text-sm text-amber-800">
@@ -1095,532 +1038,465 @@ export default function DashboardPage() {
               </div>
             ) : null}
 
-          <section id="resumen" className="scroll-mt-44">
-            <div className="mb-3">
-              <h3 className="text-lg font-semibold text-eis-navy">Resumen ejecutivo</h3>
-              <p className="text-sm text-slate-500">KPI principales del periodo seleccionado.</p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {loading ? (
-              <>
-                <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
-                <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
-                <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
-                <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
-                <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
-                <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
-              </>
-            ) : (
-              <>
-                <KpiCard
-                  title="Ingreso del periodo"
-                  value={money(totalVentasPeriodo)}
-                  subtitle={`Dif. vs periodo anterior: ${trendArrow(diferenciaPeriodoAnterior)} ${money(diferenciaPeriodoAnterior)}${
-                    diferenciaPctPeriodoAnterior === null
-                      ? ""
-                      : ` (${diferenciaPctPeriodoAnterior.toFixed(2)}%)`
-                  }`}
-                  subtitleTone={toneFromDiff(diferenciaPeriodoAnterior)}
-                />
-                <KpiCard
-                  title="Gasto del periodo"
-                  value={money(totalGastosPeriodo)}
-                  subtitle={`Dif. vs periodo anterior: ${trendArrow(diferenciaGastos)} ${money(diferenciaGastos)}${
-                    diferenciaGastosPct === null
-                      ? ""
-                      : ` (${diferenciaGastosPct.toFixed(2)}%)`
-                  }`}
-                  subtitleTone={toneFromDiff(diferenciaGastos)}
-                />
-                <KpiCard
-                  title="Utilidad del periodo"
-                  value={money(utilidadPeriodo)}
-                  subtitle={`Dif. vs periodo anterior: ${trendArrow(diferenciaUtilidad)} ${money(diferenciaUtilidad)}${
-                    diferenciaUtilidadPct === null
-                      ? ""
-                      : ` (${diferenciaUtilidadPct.toFixed(2)}%)`
-                  }`}
-                  subtitleTone={toneFromDiff(diferenciaUtilidad)}
-                />
-                <KpiCard
-                  title="Cumplimiento de meta"
-                  value={`${cumplimientoPct.toFixed(2)}%`}
-                  subtitle={`Estado: ${getEstadoLabel(estado)} | Dif.: ${trendArrow(
-                    diferenciaCumplimiento
-                  )} ${diferenciaCumplimiento.toFixed(2)}%`}
-                  subtitleTone={toneFromDiff(diferenciaCumplimiento)}
-                  tone={estado === "verde" ? "success" : estado === "amarillo" ? "warning" : "danger"}
-                />
-                <KpiCard
-                  title="Transacciones del periodo"
-                  value={totalTransaccionesPeriodo.toLocaleString("es-HN")}
-                  subtitle={`Variacion vs periodo anterior: ${
-                    variacionTransacciones === null ? "N/A" : `${variacionTransacciones.toFixed(2)}%`
-                  }`}
-                  subtitleTone={
-                    variacionTransacciones === null
-                      ? "neutral"
-                      : variacionTransacciones >= 0
-                        ? "up"
-                        : "down"
-                  }
-                />
-                <KpiCard
-                  title="Monto promedio por transaccion"
-                  value={money(ticketPromedioPeriodo)}
-                  subtitle={`Variacion vs periodo anterior: ${
-                    variacionTicketPromedio === null ? "N/A" : `${variacionTicketPromedio.toFixed(2)}%`
-                  }`}
-                  subtitleTone={
-                    variacionTicketPromedio === null
-                      ? "neutral"
-                      : variacionTicketPromedio >= 0
-                        ? "up"
-                        : "down"
-                  }
-                />
-              </>
-            )}
-            </div>
-          </section>
+            {/* ===================== RESUMEN ===================== */}
+            <section id="resumen" className="scroll-mt-44">
+              <div className="mb-3">
+                <h3 className="text-lg font-semibold text-eis-navy">Resumen ejecutivo</h3>
+                <p className="text-sm text-slate-500">KPI principales del periodo seleccionado.</p>
+              </div>
 
-          {!selectedSucursalId ? (
-            <section id="ranking" className="scroll-mt-44">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {loading ? (
+                  <>
+                    <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
+                    <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
+                    <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
+                    <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
+                    <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
+                    <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-slate-100" />
+                  </>
+                ) : (
+                  <>
+                    <KpiCard
+                      title="Ingreso del periodo"
+                      value={<NeonMoney value={totalVentasPeriodo} prevValue={totalVentasPrevio} />}
+                      subtitle={`Dif. vs periodo anterior: ${trendArrow(diferenciaPeriodoAnterior)} ${money(diferenciaPeriodoAnterior)}${
+                        diferenciaPctPeriodoAnterior === null ? "" : ` (${diferenciaPctPeriodoAnterior.toFixed(2)}%)`
+                      }`}
+                      subtitleTone={toneFromDiff(diferenciaPeriodoAnterior)}
+                    />
+                    <KpiCard
+                      title="Gasto del periodo"
+                      value={<NeonMoney value={totalGastosPeriodo} prevValue={totalGastosPrevioRango} />}
+                      subtitle={`Dif. vs periodo anterior: ${trendArrow(diferenciaGastos)} ${money(diferenciaGastos)}${
+                        diferenciaGastosPct === null ? "" : ` (${diferenciaGastosPct.toFixed(2)}%)`
+                      }`}
+                      subtitleTone={toneFromDiff(diferenciaGastos)}
+                    />
+                    <KpiCard
+                      title="Utilidad del periodo"
+                      value={<NeonMoney value={utilidadPeriodo} prevValue={utilidadPreviaRango} />}
+                      subtitle={`Dif. vs periodo anterior: ${trendArrow(diferenciaUtilidad)} ${money(diferenciaUtilidad)}${
+                        diferenciaUtilidadPct === null ? "" : ` (${diferenciaUtilidadPct.toFixed(2)}%)`
+                      }`}
+                      subtitleTone={toneFromDiff(diferenciaUtilidad)}
+                    />
+                    <KpiCard
+                      title="Cumplimiento de meta"
+                      value={`${cumplimientoPct.toFixed(2)}%`}
+                      subtitle={`Estado: ${getEstadoLabel(estado)} | Dif.: ${trendArrow(diferenciaCumplimiento)} ${diferenciaCumplimiento.toFixed(2)}%`}
+                      subtitleTone={toneFromDiff(diferenciaCumplimiento)}
+                      tone={estado === "verde" ? "success" : estado === "amarillo" ? "warning" : "danger"}
+                    />
+                    <KpiCard
+                      title="Transacciones del periodo"
+                      value={totalTransaccionesPeriodo.toLocaleString("es-HN")}
+                      subtitle={`Variacion vs periodo anterior: ${variacionTransacciones === null ? "N/A" : `${variacionTransacciones.toFixed(2)}%`}`}
+                      subtitleTone={variacionTransacciones === null ? "neutral" : variacionTransacciones >= 0 ? "up" : "down"}
+                    />
+                    <KpiCard
+                      title="Monto promedio por transaccion"
+                      value={money(ticketPromedioPeriodo)}
+                      subtitle={`Variacion vs periodo anterior: ${variacionTicketPromedio === null ? "N/A" : `${variacionTicketPromedio.toFixed(2)}%`}`}
+                      subtitleTone={variacionTicketPromedio === null ? "neutral" : variacionTicketPromedio >= 0 ? "up" : "down"}
+                    />
+                  </>
+                )}
+              </div>
+            </section>
+
+            {/* ===================== RANKING ===================== */}
+            {!selectedSucursalId ? (
+              <section id="ranking" className="scroll-mt-44">
+                <article className="overflow-auto rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
+                  <h3 className="mb-3 text-lg font-semibold text-eis-navy">Top sucursales del periodo</h3>
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="border-b border-slate-200 text-slate-500">
+                      <tr>
+                        <th className="py-2">Rank</th>
+                        <th className="py-2">Sucursal</th>
+                        <th className="py-2">Utilidad</th>
+                        <th className="py-2">Cumplimiento</th>
+                        <th className="py-2">Dif. utilidad</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rankingSucursales.map((row, index) => (
+                        <tr key={row.id_sucursal} className="border-b border-slate-100">
+                          <td className="py-2 pr-2 font-semibold text-eis-navy">#{index + 1}</td>
+                          <td className="py-2 pr-2">{row.sucursal}</td>
+                          <td className="py-2 pr-2">{money(row.utilidad)}</td>
+                          <td className="py-2 pr-2">{row.cumplimiento_pct}%</td>
+                          <td className={`py-2 pr-2 font-semibold ${diffTextTone(row.diff_utilidad)}`}>
+                            {trendArrow(row.diff_utilidad)} {money(row.diff_utilidad)}
+                            {row.diff_pct === null ? "" : ` (${row.diff_pct.toFixed(2)}%)`}
+                          </td>
+                        </tr>
+                      ))}
+                      {rankingSucursales.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-6 text-center text-sm text-slate-500">
+                            No hay datos para generar ranking en este periodo.
+                          </td>
+                        </tr>
+                      ) : null}
+                    </tbody>
+                  </table>
+                </article>
+              </section>
+            ) : null}
+
+            {/* ===================== ALERTAS ===================== */}
+            <section id="alertas" className="scroll-mt-44">
+              <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
+                <h3 className="mb-3 text-lg font-semibold text-eis-navy">Alertas ejecutivas</h3>
+                {alerts.length === 0 ? (
+                  <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">Sin alertas criticas para este periodo.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {alerts.map((item) => (
+                      <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-50 p-3">
+                        <p className="text-sm text-amber-700">{item.text}</p>
+                        {item.actionable ? (
+                          <button
+                            className="rounded-md border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-700 transition-colors duration-150 hover:bg-amber-100 active:bg-amber-200/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200"
+                            onClick={() => scrollToSection(item.target)}
+                          >
+                            Ver detalle
+                          </button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </article>
+            </section>
+
+            {/* ===================== TENDENCIA ===================== */}
+            <section id="tendencia" className="scroll-mt-44">
+              <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-lg font-semibold text-eis-navy">Tendencia de ventas</h3>
+                  <div className="inline-flex rounded-lg border border-slate-300 bg-white p-1">
+                    <button
+                      className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 ${
+                        trendMode === "historico" ? "bg-eis-navy text-white" : "text-slate-600 hover:bg-slate-100 active:bg-slate-200"
+                      }`}
+                      onClick={() => setTrendMode("historico")}
+                    >
+                      Historico
+                    </button>
+                    <button
+                      className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 ${
+                        trendMode === "filtrado" ? "bg-eis-navy text-white" : "text-slate-600 hover:bg-slate-100 active:bg-slate-200"
+                      }`}
+                      onClick={() => setTrendMode("filtrado")}
+                    >
+                      Periodo filtrado
+                    </button>
+                  </div>
+                </div>
+                <p className="mb-3 text-xs text-slate-500">
+                  {trendMode === "historico" ? "Vista historica por sucursal." : "Vista segun filtros de mes/rango."} Variacion vs periodo anterior:{" "}
+                  {variacionVentas === null ? "N/A" : `${variacionVentas.toFixed(2)}%`}
+                </p>
+                {trendMode === "filtrado" && selectedRange === 1 ? (
+                  <p className="mb-3 rounded-md bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
+                    En modo filtrado se incluye tambien el mes anterior para mostrar tendencia minima.
+                  </p>
+                ) : null}
+                <div className="h-72">
+                  {activeTrendData.length === 0 ? (
+                    <div className="flex h-full items-center justify-center rounded-lg bg-slate-50">
+                      <p className="text-sm text-slate-500">No hay datos para mostrar en este modo de tendencia.</p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={activeTrendData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="periodo" />
+                        <YAxis />
+                        <Tooltip formatter={(value) => money(value)} />
+                        <Line type="monotone" dataKey="total" stroke="#0b1d3a" strokeWidth={3} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              </article>
+            </section>
+
+            {/* ===================== COMPARATIVO ===================== */}
+            <section id="comparativo" className="scroll-mt-44">
+              <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
+                <h3 className="mb-3 text-lg font-semibold text-eis-navy">Comparativa real vs meta por sucursal</h3>
+                <div className="h-72">
+                  {hasComparativoData ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={compareBySucursal}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="sucursal" />
+                        <YAxis />
+                        <Tooltip formatter={(value) => money(value)} />
+                        <Legend />
+                        <Bar dataKey="ventas" fill="#0b1d3a" name="Ventas" radius={[6, 6, 0, 0]} />
+                        <Bar dataKey="meta" fill="#22d3ee" name="Meta" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex h-full flex-col items-center justify-center gap-3 rounded-lg bg-slate-50 p-4 text-center">
+                      <p className="text-sm text-slate-600">No hay datos para la comparativa en el periodo seleccionado.</p>
+                      <button
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100"
+                        onClick={resetFilters}
+                      >
+                        Volver al ultimo periodo con datos
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </article>
+            </section>
+
+            {/* ===================== UTILIDAD MENSUAL ===================== */}
+            <div className="space-y-1 pt-1">
+              <p className="px-1 text-[11px] uppercase tracking-wider text-slate-500">Operacion</p>
+              <div className="h-px bg-slate-200" />
+            </div>
+
+            <section id="utilidad" className="scroll-mt-44">
+              <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-lg font-semibold text-eis-navy">Utilidad mensual</h3>
+                  <div className="inline-flex rounded-lg border border-slate-300 bg-white p-1">
+                    <button
+                      className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 ${
+                        utilidadMode === "historico" ? "bg-eis-navy text-white" : "text-slate-600 hover:bg-slate-100 active:bg-slate-200"
+                      }`}
+                      onClick={() => setUtilidadMode("historico")}
+                    >
+                      Historico
+                    </button>
+                    <button
+                      className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 ${
+                        utilidadMode === "filtrado" ? "bg-eis-navy text-white" : "text-slate-600 hover:bg-slate-100 active:bg-slate-200"
+                      }`}
+                      onClick={() => setUtilidadMode("filtrado")}
+                    >
+                      Periodo filtrado
+                    </button>
+                  </div>
+                </div>
+                {utilidadMode === "filtrado" && selectedRange === 1 ? (
+                  <p className="mb-3 rounded-md bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
+                    En modo filtrado se incluye tambien el mes anterior para mostrar tendencia minima.
+                  </p>
+                ) : null}
+                <div className="h-72">
+                  {activeUtilidadData.length === 0 ? (
+                    <div className="flex h-full items-center justify-center rounded-lg bg-slate-50">
+                      <p className="text-sm text-slate-500">No hay datos para mostrar en este modo de utilidad.</p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={activeUtilidadData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="periodo" />
+                        <YAxis />
+                        <Tooltip formatter={(value) => money(value)} />
+                        <Line type="monotone" dataKey="utilidad" stroke="#14b8a6" strokeWidth={3} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              </article>
+            </section>
+
+            {/* ===================== PERIODOS ===================== */}
+            <section id="periodos" className="scroll-mt-44">
               <article className="overflow-auto rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
-                <h3 className="mb-3 text-lg font-semibold text-eis-navy">Top sucursales del periodo</h3>
+                <h3 className="mb-3 text-lg font-semibold text-eis-navy">Comparativa de utilidad</h3>
                 <table className="min-w-full text-left text-sm">
                   <thead className="border-b border-slate-200 text-slate-500">
                     <tr>
-                      <th className="py-2">Rank</th>
                       <th className="py-2">Sucursal</th>
-                      <th className="py-2">Utilidad</th>
-                      <th className="py-2">Cumplimiento</th>
-                      <th className="py-2">Dif. utilidad</th>
+                      <th className="py-2">Actual</th>
+                      <th className="py-2">Anterior</th>
+                      <th className="py-2">Diferencia</th>
+                      <th className="py-2">% Dif</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rankingSucursales.map((row, index) => (
+                    {compareVsAnteriorBySucursal.map((row) => (
                       <tr key={row.id_sucursal} className="border-b border-slate-100">
-                        <td className="py-2 pr-2 font-semibold text-eis-navy">#{index + 1}</td>
                         <td className="py-2 pr-2">{row.sucursal}</td>
-                        <td className="py-2 pr-2">{money(row.utilidad)}</td>
-                        <td className="py-2 pr-2">{row.cumplimiento_pct}%</td>
+                        <td className="py-2 pr-2">{money(row.actual_utilidad)}</td>
+                        <td className="py-2 pr-2">{money(row.anterior_utilidad)}</td>
                         <td className={`py-2 pr-2 font-semibold ${diffTextTone(row.diff_utilidad)}`}>
                           {trendArrow(row.diff_utilidad)} {money(row.diff_utilidad)}
-                          {row.diff_pct === null ? "" : ` (${row.diff_pct.toFixed(2)}%)`}
+                        </td>
+                        <td className={`py-2 pr-2 font-semibold ${diffTextTone(row.diff_utilidad)}`}>
+                          {row.diff_pct === null ? "N/A" : `${trendArrow(row.diff_utilidad)} ${row.diff_pct.toFixed(2)}%`}
                         </td>
                       </tr>
                     ))}
-                    {rankingSucursales.length === 0 ? (
+                  </tbody>
+                </table>
+              </article>
+            </section>
+
+            {/* ===================== GASTOS ===================== */}
+            <section id="gastos" className="grid gap-4 scroll-mt-44 xl:grid-cols-2">
+              <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
+                <h3 className="mb-3 text-lg font-semibold text-eis-navy">Distribucion de gastos</h3>
+                <div className="h-72">
+                  {gastosPorCategoria.length === 0 ? (
+                    <div className="flex h-full items-center justify-center rounded-lg bg-slate-50">
+                      <p className="text-sm text-slate-500">No hay gastos para el periodo seleccionado.</p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={gastosPorCategoria} dataKey="value" nameKey="name" innerRadius={0} outerRadius={105}>
+                          {gastosPorCategoria.map((entry, index) => (
+                            <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value) => money(value)} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {gastosPorCategoria.map((item, index) => (
+                    <div key={item.name} className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                      <span className="flex items-center gap-2 text-sm text-slate-700">
+                        <span className="inline-block h-3 w-3 rounded-full" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
+                        {item.name}
+                      </span>
+                      <span className="text-xs font-semibold text-eis-navy">{money(item.value)}</span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
+                <h3 className="mb-3 text-lg font-semibold text-eis-navy">Top categorias de gasto</h3>
+                <div className="space-y-2">
+                  {latest5Categories.length === 0 ? (
+                    <div className="flex h-72 items-center justify-center rounded-lg bg-slate-50">
+                      <p className="text-sm text-slate-500">No hay gastos para el periodo seleccionado.</p>
+                    </div>
+                  ) : (
+                    latest5Categories.map((item, index) => (
+                      <div key={item.name} className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
+                        <span className="text-sm text-slate-700">
+                          {index + 1}. {item.name}
+                        </span>
+                        <span className="text-sm font-semibold text-eis-navy">{money(item.value)}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </article>
+            </section>
+
+            {/* ===================== DETALLE ===================== */}
+            <section id="detalle" className="scroll-mt-44">
+              <article className="overflow-auto rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-semibold text-eis-navy">Detalle por sucursal</h3>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="text"
+                      value={detalleSearch}
+                      onChange={(e) => setDetalleSearch(e.target.value)}
+                      placeholder="Buscar sucursal..."
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 transition-colors duration-150 outline-none focus-visible:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-100"
+                    />
+                  </div>
+                </div>
+                <table className="min-w-full text-left text-sm">
+                  <thead className="border-b border-slate-200 text-slate-500">
+                    <tr>
+                      <th className="py-2">
+                        <button className="font-semibold" onClick={() => toggleDetalleSort("sucursal")}>Sucursal{sortIndicator("sucursal")}</button>
+                      </th>
+                      <th className="py-2">
+                        <button className="font-semibold" onClick={() => toggleDetalleSort("ventas")}>Ventas{sortIndicator("ventas")}</button>
+                      </th>
+                      <th className="py-2">
+                        <button className="font-semibold" onClick={() => toggleDetalleSort("gastos")}>Gastos{sortIndicator("gastos")}</button>
+                      </th>
+                      <th className="py-2">
+                        <button className="font-semibold" onClick={() => toggleDetalleSort("utilidad")}>Utilidad{sortIndicator("utilidad")}</button>
+                      </th>
+                      <th className="py-2">
+                        <button className="font-semibold" onClick={() => toggleDetalleSort("meta")}>Meta{sortIndicator("meta")}</button>
+                      </th>
+                      <th className="py-2">
+                        <button className="font-semibold" onClick={() => toggleDetalleSort("cumplimiento_pct")}>Cumplimiento{sortIndicator("cumplimiento_pct")}</button>
+                      </th>
+                      <th className="py-2">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSortedDetalleRows.map((row) => (
+                      <tr key={row.id_sucursal} className="border-b border-slate-100">
+                        <td className="py-2 pr-2">{row.sucursal}</td>
+                        <td className="py-2 pr-2">{money(row.ventas)}</td>
+                        <td className="py-2 pr-2">{money(row.gastos)}</td>
+                        <td className="py-2 pr-2">{money(row.utilidad)}</td>
+                        <td className="py-2 pr-2">{money(row.meta)}</td>
+                        <td className="py-2 pr-2">{row.cumplimiento_pct}%</td>
+                        <td className="py-2 pr-2"><EstadoChip estado={row.estado} /></td>
+                      </tr>
+                    ))}
+                    {filteredSortedDetalleRows.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="py-6 text-center text-sm text-slate-500">
-                          No hay datos para generar ranking en este periodo.
-                        </td>
+                        <td colSpan={7} className="py-6 text-center text-sm text-slate-500">No hay sucursales que coincidan con la busqueda.</td>
                       </tr>
                     ) : null}
                   </tbody>
                 </table>
               </article>
             </section>
-          ) : null}
 
-          <section id="alertas" className="scroll-mt-44">
-            <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
-              <h3 className="mb-3 text-lg font-semibold text-eis-navy">Alertas ejecutivas</h3>
-              {alerts.length === 0 ? (
-                <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">
-                  Sin alertas criticas para este periodo.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {alerts.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-50 p-3"
-                    >
-                      <p className="text-sm text-amber-700">{item.text}</p>
-                      {item.actionable ? (
-                        <button
-                          className="rounded-md border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-700 transition-colors duration-150 hover:bg-amber-100 active:bg-amber-200/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200"
-                          onClick={() => scrollToSection(item.target)}
-                        >
-                          Ver detalle
-                        </button>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </article>
-          </section>
-
-          <section id="tendencia" className="scroll-mt-44">
-            <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-lg font-semibold text-eis-navy">Tendencia de ventas</h3>
-                <div className="inline-flex rounded-lg border border-slate-300 bg-white p-1">
-                  <button
-                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 ${
-                      trendMode === "historico"
-                        ? "bg-eis-navy text-white"
-                        : "text-slate-600 hover:bg-slate-100 active:bg-slate-200"
-                    }`}
-                    onClick={() => setTrendMode("historico")}
-                  >
-                    Historico
-                  </button>
-                  <button
-                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 ${
-                      trendMode === "filtrado"
-                        ? "bg-eis-navy text-white"
-                        : "text-slate-600 hover:bg-slate-100 active:bg-slate-200"
-                    }`}
-                    onClick={() => setTrendMode("filtrado")}
-                  >
-                    Periodo filtrado
-                  </button>
-                </div>
-              </div>
-              <p className="mb-3 text-xs text-slate-500">
-                {trendMode === "historico"
-                  ? "Vista historica por sucursal."
-                  : "Vista segun filtros de mes/rango."}{" "}
-                Variacion vs periodo anterior:{" "}
-                {variacionVentas === null ? "N/A" : `${variacionVentas.toFixed(2)}%`}
-              </p>
-              {trendMode === "filtrado" && selectedRange === 1 ? (
-                <p className="mb-3 rounded-md bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
-                  En modo filtrado se incluye tambien el mes anterior para mostrar tendencia minima.
-                </p>
-              ) : null}
-              <div className="h-72">
-                {activeTrendData.length === 0 ? (
-                  <div className="flex h-full items-center justify-center rounded-lg bg-slate-50">
-                    <p className="text-sm text-slate-500">
-                      No hay datos para mostrar en este modo de tendencia.
-                    </p>
+            {/* ===================== EXPORTAR (DEBAJO DE DETALLE) ===================== */}
+            <section id="exportar" className="scroll-mt-44">
+              <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-semibold text-eis-navy">Exportar datos</h3>
+                    <p className="text-xs text-slate-500">Selecciona formato y dataset para descargar el archivo.</p>
                   </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={activeTrendData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="periodo" />
-                      <YAxis />
-                      <Tooltip formatter={(value) => money(value)} />
-                      <Line type="monotone" dataKey="total" stroke="#0b1d3a" strokeWidth={3} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-            </article>
-          </section>
-
-          <section id="comparativo" className="scroll-mt-44">
-            <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
-              <h3 className="mb-3 text-lg font-semibold text-eis-navy">Comparativa real vs meta por sucursal</h3>
-              <div className="h-72">
-                {hasComparativoData ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={compareBySucursal}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="sucursal" />
-                      <YAxis />
-                      <Tooltip formatter={(value) => money(value)} />
-                      <Legend />
-                      <Bar dataKey="ventas" fill="#0b1d3a" name="Ventas" radius={[6, 6, 0, 0]} />
-                      <Bar dataKey="meta" fill="#22d3ee" name="Meta" radius={[6, 6, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex h-full flex-col items-center justify-center gap-3 rounded-lg bg-slate-50 p-4 text-center">
-                    <p className="text-sm text-slate-600">
-                      No hay datos para la comparativa en el periodo seleccionado.
-                    </p>
-                    <button
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100"
-                      onClick={resetFilters}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      value={exportFormat}
+                      onChange={(e) => setExportFormat(e.target.value)}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-150 outline-none focus-visible:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-100"
+                      aria-label="Formato de exportacion"
                     >
-                      Volver al ultimo periodo con datos
+                      <option value="csv">CSV</option>
+                      <option value="xlsx">Excel</option>
+                      <option value="pdf">PDF</option>
+                    </select>
+                    <button className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100" onClick={exportDetalle}>
+                      Exportar detalle
+                    </button>
+                    <button className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100" onClick={exportVentas}>
+                      Exportar ventas
+                    </button>
+                    <button className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100" onClick={exportGastos}>
+                      Exportar gastos
+                    </button>
+                    <button className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100" onClick={exportMetas}>
+                      Exportar metas
                     </button>
                   </div>
-                )}
-              </div>
-            </article>
-          </section>
-
-          <div className="space-y-1 pt-1">
-            <p className="px-1 text-[11px] uppercase tracking-wider text-slate-500">Operacion</p>
-            <div className="h-px bg-slate-200" />
-          </div>
-
-          <section id="utilidad" className="scroll-mt-44">
-            <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-lg font-semibold text-eis-navy">Utilidad mensual</h3>
-                <div className="inline-flex rounded-lg border border-slate-300 bg-white p-1">
-                  <button
-                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 ${
-                      utilidadMode === "historico"
-                        ? "bg-eis-navy text-white"
-                        : "text-slate-600 hover:bg-slate-100 active:bg-slate-200"
-                    }`}
-                    onClick={() => setUtilidadMode("historico")}
-                  >
-                    Historico
-                  </button>
-                  <button
-                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 ${
-                      utilidadMode === "filtrado"
-                        ? "bg-eis-navy text-white"
-                        : "text-slate-600 hover:bg-slate-100 active:bg-slate-200"
-                    }`}
-                    onClick={() => setUtilidadMode("filtrado")}
-                  >
-                    Periodo filtrado
-                  </button>
                 </div>
-              </div>
-              {utilidadMode === "filtrado" && selectedRange === 1 ? (
-                <p className="mb-3 rounded-md bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
-                  En modo filtrado se incluye tambien el mes anterior para mostrar tendencia minima.
-                </p>
-              ) : null}
-              <div className="h-72">
-                {activeUtilidadData.length === 0 ? (
-                  <div className="flex h-full items-center justify-center rounded-lg bg-slate-50">
-                    <p className="text-sm text-slate-500">
-                      No hay datos para mostrar en este modo de utilidad.
-                    </p>
-                  </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={activeUtilidadData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="periodo" />
-                      <YAxis />
-                      <Tooltip formatter={(value) => money(value)} />
-                      <Line type="monotone" dataKey="utilidad" stroke="#14b8a6" strokeWidth={3} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-            </article>
-          </section>
-
-          <section id="periodos" className="scroll-mt-44">
-            <article className="overflow-auto rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
-              <h3 className="mb-3 text-lg font-semibold text-eis-navy">Comparativa de utilidad</h3>
-              <table className="min-w-full text-left text-sm">
-                <thead className="border-b border-slate-200 text-slate-500">
-                  <tr>
-                    <th className="py-2">Sucursal</th>
-                    <th className="py-2">Actual</th>
-                    <th className="py-2">Anterior</th>
-                    <th className="py-2">Diferencia</th>
-                    <th className="py-2">% Dif</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {compareVsAnteriorBySucursal.map((row) => (
-                    <tr key={row.id_sucursal} className="border-b border-slate-100">
-                      <td className="py-2 pr-2">{row.sucursal}</td>
-                      <td className="py-2 pr-2">{money(row.actual_utilidad)}</td>
-                      <td className="py-2 pr-2">{money(row.anterior_utilidad)}</td>
-                      <td className={`py-2 pr-2 font-semibold ${diffTextTone(row.diff_utilidad)}`}>
-                        {trendArrow(row.diff_utilidad)} {money(row.diff_utilidad)}
-                      </td>
-                      <td className={`py-2 pr-2 font-semibold ${diffTextTone(row.diff_utilidad)}`}>
-                        {row.diff_pct === null ? "N/A" : `${trendArrow(row.diff_utilidad)} ${row.diff_pct.toFixed(2)}%`}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </article>
-          </section>
-
-          <section id="gastos" className="grid gap-4 scroll-mt-44 xl:grid-cols-2">
-            <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
-              <h3 className="mb-3 text-lg font-semibold text-eis-navy">Distribucion de gastos</h3>
-              <div className="h-72">
-                {gastosPorCategoria.length === 0 ? (
-                  <div className="flex h-full items-center justify-center rounded-lg bg-slate-50">
-                    <p className="text-sm text-slate-500">No hay gastos para el periodo seleccionado.</p>
-                  </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={gastosPorCategoria} dataKey="value" nameKey="name" innerRadius={0} outerRadius={105}>
-                        {gastosPorCategoria.map((entry, index) => (
-                          <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value) => money(value)} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {gastosPorCategoria.map((item, index) => (
-                  <div key={item.name} className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
-                    <span className="flex items-center gap-2 text-sm text-slate-700">
-                      <span
-                        className="inline-block h-3 w-3 rounded-full"
-                        style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
-                      />
-                      {item.name}
-                    </span>
-                    <span className="text-xs font-semibold text-eis-navy">{money(item.value)}</span>
-                  </div>
-                ))}
-              </div>
-            </article>
-
-            <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
-              <h3 className="mb-3 text-lg font-semibold text-eis-navy">Top categorias de gasto</h3>
-              <div className="space-y-2">
-                {latest5Categories.length === 0 ? (
-                  <div className="flex h-72 items-center justify-center rounded-lg bg-slate-50">
-                    <p className="text-sm text-slate-500">No hay gastos para el periodo seleccionado.</p>
-                  </div>
-                ) : (
-                  latest5Categories.map((item, index) => (
-                    <div key={item.name} className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
-                      <span className="text-sm text-slate-700">
-                        {index + 1}. {item.name}
-                      </span>
-                      <span className="text-sm font-semibold text-eis-navy">{money(item.value)}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </article>
-          </section>
-
-          <section id="exportar" className="scroll-mt-44">
-            <article className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-lg font-semibold text-eis-navy">Exportar datos</h3>
-                  <p className="text-xs text-slate-500">
-                    Selecciona formato y dataset para descargar el archivo.
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    value={exportFormat}
-                    onChange={(e) => setExportFormat(e.target.value)}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-150 outline-none focus-visible:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-100"
-                    aria-label="Formato de exportacion"
-                  >
-                    <option value="csv">CSV</option>
-                    <option value="xlsx">Excel</option>
-                    <option value="pdf">PDF</option>
-                  </select>
-                  <button
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100"
-                    onClick={exportDetalle}
-                  >
-                    Exportar detalle
-                  </button>
-                  <button
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100"
-                    onClick={exportVentas}
-                  >
-                    Exportar ventas
-                  </button>
-                  <button
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100"
-                    onClick={exportGastos}
-                  >
-                    Exportar gastos
-                  </button>
-                  <button
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100"
-                    onClick={exportMetas}
-                  >
-                    Exportar metas
-                  </button>
-                </div>
-              </div>
-            </article>
-          </section>
-
-          <section id="detalle" className="scroll-mt-44">
-            <article className="overflow-auto rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="text-lg font-semibold text-eis-navy">Detalle por sucursal</h3>
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    type="text"
-                    value={detalleSearch}
-                    onChange={(e) => setDetalleSearch(e.target.value)}
-                    placeholder="Buscar sucursal..."
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-700 transition-colors duration-150 outline-none focus-visible:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-100"
-                  />
-                </div>
-              </div>
-              <table className="min-w-full text-left text-sm">
-                <thead className="border-b border-slate-200 text-slate-500">
-                  <tr>
-                    <th className="py-2">
-                      <button className="font-semibold" onClick={() => toggleDetalleSort("sucursal")}>
-                        Sucursal{sortIndicator("sucursal")}
-                      </button>
-                    </th>
-                    <th className="py-2">
-                      <button className="font-semibold" onClick={() => toggleDetalleSort("ventas")}>
-                        Ventas{sortIndicator("ventas")}
-                      </button>
-                    </th>
-                    <th className="py-2">
-                      <button className="font-semibold" onClick={() => toggleDetalleSort("gastos")}>
-                        Gastos{sortIndicator("gastos")}
-                      </button>
-                    </th>
-                    <th className="py-2">
-                      <button className="font-semibold" onClick={() => toggleDetalleSort("utilidad")}>
-                        Utilidad{sortIndicator("utilidad")}
-                      </button>
-                    </th>
-                    <th className="py-2">
-                      <button className="font-semibold" onClick={() => toggleDetalleSort("meta")}>
-                        Meta{sortIndicator("meta")}
-                      </button>
-                    </th>
-                    <th className="py-2">
-                      <button className="font-semibold" onClick={() => toggleDetalleSort("cumplimiento_pct")}>
-                        Cumplimiento{sortIndicator("cumplimiento_pct")}
-                      </button>
-                    </th>
-                    <th className="py-2">Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredSortedDetalleRows.map((row) => (
-                    <tr key={row.id_sucursal} className="border-b border-slate-100">
-                      <td className="py-2 pr-2">{row.sucursal}</td>
-                      <td className="py-2 pr-2">{money(row.ventas)}</td>
-                      <td className="py-2 pr-2">{money(row.gastos)}</td>
-                      <td className="py-2 pr-2">{money(row.utilidad)}</td>
-                      <td className="py-2 pr-2">{money(row.meta)}</td>
-                      <td className="py-2 pr-2">{row.cumplimiento_pct}%</td>
-                      <td className="py-2 pr-2">
-                        <EstadoChip estado={row.estado} />
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredSortedDetalleRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="py-6 text-center text-sm text-slate-500">
-                        No hay sucursales que coincidan con la busqueda.
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </article>
-          </section>
+              </article>
+            </section>
           </div>
         </section>
       </div>
@@ -1638,9 +1514,7 @@ export default function DashboardPage() {
       {toast ? (
         <div
           className={`fixed bottom-6 left-1/2 z-30 -translate-x-1/2 rounded-lg px-4 py-2 text-sm font-semibold shadow-soft ${
-            toast.type === "success"
-              ? "bg-emerald-600 text-white"
-              : "bg-red-600 text-white"
+            toast.type === "success" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"
           }`}
         >
           {toast.message}
@@ -1649,3 +1523,4 @@ export default function DashboardPage() {
     </main>
   );
 }
+
