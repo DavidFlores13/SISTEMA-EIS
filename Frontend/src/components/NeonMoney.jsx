@@ -1,7 +1,7 @@
 import React from "react";
 
-const neonUp = "text-[#22c55e] drop-shadow-[0_0_6px_rgba(34,197,94,0.9)]";
-const neonDown = "text-[#ef4444] drop-shadow-[0_0_6px_rgba(239,68,68,0.9)]";
+const neonUp = "text-[#22c55e] ";
+const neonDown = "text-[#ef4444]";
 const neonNeutral = "text-eis-navy";
 
 function classForDiff(diff) {
