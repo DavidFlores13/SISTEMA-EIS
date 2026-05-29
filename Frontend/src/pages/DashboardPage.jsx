@@ -1,5 +1,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { utils as xlsxUtils, writeFile as writeXlsxFile } from "xlsx";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -156,7 +157,8 @@ function EstadoChip({ estado }) {
 }
 
 export default function DashboardPage() {
-  const { logout } = useAuth();
+  const { logout, role } = useAuth();
+  const navigate = useNavigate();
   const { filters, updateFilters } = useFilters();
   const selectedSucursalId = filters.id_sucursal ? Number(filters.id_sucursal) : null;
 
@@ -980,13 +982,15 @@ export default function DashboardPage() {
 
               <div className="flex items-center gap-2">
                 <ApiStatusIndicator connected={apiConnected} />
-                <button
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={refreshDashboardData}
-                  disabled={loading}
-                >
-                  {loading ? "Actualizando..." : "Actualizar datos"}
-                </button>
+                {role === "admin" ? (
+                  <button
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors duration-150 hover:bg-slate-50 active:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100"
+                    type="button"
+                    onClick={() => navigate("/crm")}
+                  >
+                    Cambiar a CRM
+                  </button>
+                ) : null}
                 <button
                   className="rounded-lg bg-eis-navy px-4 py-2 text-sm font-medium text-white transition-colors duration-150 hover:bg-slate-800 active:bg-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100"
                   onClick={logout}

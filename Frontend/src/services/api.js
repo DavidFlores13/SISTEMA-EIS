@@ -80,6 +80,58 @@ export function getMetas(idSucursal = "") {
   return apiFetch(`/metas${query ? `?${query}` : ""}`);
 }
 
+export function getClientes(estado = "") {
+  const params = new URLSearchParams();
+  if (estado) params.set("estado", estado);
+  const query = params.toString();
+  return apiFetch(`/clientes${query ? `?${query}` : ""}`);
+}
+
+export function createCliente(payload) {
+  return apiFetch("/clientes", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getInteracciones(clienteId) {
+  const params = new URLSearchParams();
+  if (clienteId) params.set("cliente_id", String(clienteId));
+  const query = params.toString();
+  return apiFetch(`/interacciones?${query}`);
+}
+
+export function getOportunidades() {
+  return apiFetch("/oportunidades");
+}
+
+export function createOportunidad(payload) {
+  return apiFetch("/oportunidades", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateOportunidad(id, payload) {
+  return apiFetch(`/oportunidades/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateCliente(id, payload) {
+  return apiFetch(`/clientes/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deactivateCliente(id) {
+  return apiFetch(`/clientes/${id}`, {
+    method: "DELETE",
+  });
+}
+
 export async function checkApiConnection() {
   const token = localStorage.getItem("eis_token");
   const headers = {};

@@ -17,8 +17,13 @@ export default function LoginPage() {
     setError("");
 
     try {
-      await login(username.trim(), password.trim());
-      navigate("/");
+      const data = await login(username.trim(), password.trim());
+      const role = data.user?.role || "eis";
+      if (role === "crm") {
+        navigate("/crm");
+      } else {
+        navigate("/");
+      }
     } catch (err) {
       setError(err.message);
     }
